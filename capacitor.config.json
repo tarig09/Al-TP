@@ -1,0 +1,7 @@
+{
+  "appId": "com.almahatta.app",
+  "appName": "المحطة",
+  "webDir": "www",
+  "android": { "allowMixedContent": false },
+  "server": { "androidScheme": "https" }
+}
