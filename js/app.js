@@ -57,33 +57,89 @@ const shell = (html, on, title, back = true) => { $app.innerHTML = (title ? top(
 const loading = () => { $app.innerHTML = '<div class="spin">جارٍ التحميل…</div>'; };
 const need = () => { if (!user) { go('#/auth'); return false; } return true; };
 
-/* ---------- مصادقة ---------- */
+/* ---------- مصادقة (رمز من 6 أرقام بدل الرابط) ---------- */
+let recovering = false;
+const digits = v => String(v || '').replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/\D/g, '');
+const authErr = m => {
+  m = String(m || '');
+  if (/rate limit|too many|seconds/i.test(m)) return 'تم تجاوز عدد الرسائل المسموح، حاول بعد قليل.';
+  if (/Invalid login/i.test(m)) return 'البريد أو كلمة المرور غير صحيحة.';
+  if (/expired|invalid/i.test(m)) return 'الرمز غير صحيح أو انتهت صلاحيته.';
+  if (/registered/i.test(m)) return 'هذا البريد مسجّل مسبقاً، سجّل الدخول أو استعد كلمة المرور.';
+  if (/same password|different from the old/i.test(m)) return 'اختر كلمة مرور مختلفة عن القديمة.';
+  return m;
+};
 function viewAuth() {
-  let mode = 'in';
-  const draw = () => {
-    $app.innerHTML = `<div class="auth"><div class="logo"><img src="assets/logo.svg" alt=""><h1>المحطة</h1><div class="mut">AL-MAHATTA</div></div>
-    <div class="tabs"><button class="${mode==='in'?'on':''}" id="ti">تسجيل الدخول</button><button class="${mode==='up'?'on':''}" id="tu">حساب جديد</button></div>
-    <div id="msg"></div>
-    ${mode==='up'?'<label>الاسم الكامل</label><input id="fn" autocomplete="name"><label>رقم الهاتف</label><input id="ph" type="tel" inputmode="tel" autocomplete="tel">':''}
-    <label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="email" dir="ltr">
-    <label>كلمة المرور</label><input id="pw" type="password" autocomplete="${mode==='in'?'current-password':'new-password'}" dir="ltr">
-    <div style="height:18px"></div><button class="btn" id="go">${mode==='in'?'دخول':'إنشاء الحساب'}</button></div>`;
-    document.getElementById('ti').onclick = () => { mode='in'; draw(); };
-    document.getElementById('tu').onclick = () => { mode='up'; draw(); };
-    document.getElementById('go').onclick = async e => {
-      const b = e.target, email = val('em'), password = document.getElementById('pw').value, m = document.getElementById('msg');
-      if (!email || password.length < 6) { m.innerHTML = '<div class="err">أدخل البريد وكلمة مرور (6 أحرف على الأقل).</div>'; return; }
-      busy(b, true); m.innerHTML = '';
-      let r;
-      if (mode === 'in') r = await sb.auth.signInWithPassword({ email, password });
-      else {
-        if (!val('fn') || !val('ph')) { m.innerHTML = '<div class="err">الاسم والهاتف مطلوبان.</div>'; busy(b, false); return; }
-        r = await sb.auth.signUp({ email, password, options: { data: { full_name: val('fn'), phone: val('ph') } } });
-        if (!r.error && !r.data.session) { m.innerHTML = '<div class="note">تم إنشاء الحساب. افتح بريدك لتأكيد الحساب ثم سجّل الدخول.</div>'; busy(b, false); return; }
-      }
-      busy(b, false);
-      if (r.error) m.innerHTML = `<div class="err">${esc(r.error.message === 'Invalid login credentials' ? 'البريد أو كلمة المرور غير صحيحة.' : r.error.message)}</div>`;
-    };
+  let mode = 'in', email = '', timer = null;
+  const note = (t, cls = 'err') => { const m = document.getElementById('msg'); if (m) m.innerHTML = t ? `<div class="${cls}">${esc(t)}</div>` : ''; };
+  const startCd = () => {
+    const r = document.getElementById('rs'); if (!r) return; let n = 60; r.classList.add('off');
+    clearInterval(timer);
+    timer = setInterval(() => { n--; if (!document.getElementById('rs')) return clearInterval(timer); if (n <= 0) { clearInterval(timer); r.classList.remove('off'); r.textContent = 'إعادة إرسال الرمز'; } else r.textContent = `إعادة الإرسال بعد ${n} ث`; }, 1000);
+    r.textContent = 'إعادة الإرسال بعد 60 ث';
+  };
+  const codeBox = `<label>الرمز المكوّن من 6 أرقام</label><input id="cd" class="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" dir="ltr" placeholder="------">`;
+  const draw = (notice, kind) => {
+    clearInterval(timer);
+    const tabs = mode === 'in' || mode === 'up' ? `<div class="tabs"><button class="${mode==='in'?'on':''}" id="ti">تسجيل الدخول</button><button class="${mode==='up'?'on':''}" id="tu">حساب جديد</button></div>` : '';
+    const emailF = `<label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="email" dir="ltr" value="${esc(email)}">`;
+    const pwF = (l, ac) => `<label>${l}</label><input id="pw" type="password" autocomplete="${ac}" dir="ltr">`;
+    let head = '', body = '', btn = '', foot = '';
+    if (mode === 'in') { body = emailF + pwF('كلمة المرور', 'current-password'); btn = 'دخول'; foot = '<a class="lnk" id="fg">نسيت كلمة المرور؟</a>'; }
+    if (mode === 'up') { body = '<label>الاسم الكامل</label><input id="fn" autocomplete="name"><label>رقم الهاتف</label><input id="ph" type="tel" inputmode="tel" autocomplete="tel">' + emailF + pwF('كلمة المرور', 'new-password'); btn = 'إنشاء الحساب'; }
+    if (mode === 'verify') { head = `<h2 class="ah">تأكيد الحساب</h2><div class="note">أرسلنا رمزاً من 6 أرقام إلى <b dir="ltr">${esc(email)}</b>. أدخله لتفعيل حسابك.</div>`; body = codeBox; btn = 'تأكيد'; foot = '<a class="lnk" id="rs">إعادة إرسال الرمز</a><a class="lnk" id="bk">رجوع</a>'; }
+    if (mode === 'forgot') { head = '<h2 class="ah">استعادة الحساب</h2><div class="note">أدخل بريدك وسنرسل لك رمزاً من 6 أرقام لتعيين كلمة مرور جديدة.</div>'; body = emailF; btn = 'إرسال الرمز'; foot = '<a class="lnk" id="bk">رجوع لتسجيل الدخول</a>'; }
+    if (mode === 'reset') { head = `<h2 class="ah">كلمة مرور جديدة</h2><div class="note">أدخل الرمز المرسل إلى <b dir="ltr">${esc(email)}</b> ثم كلمة المرور الجديدة.</div>`; body = codeBox + pwF('كلمة المرور الجديدة', 'new-password'); btn = 'تغيير كلمة المرور'; foot = '<a class="lnk" id="rs">إعادة إرسال الرمز</a><a class="lnk" id="bk">رجوع لتسجيل الدخول</a>'; }
+    $app.innerHTML = `<div class="auth"><div class="logo"><img src="assets/logo.svg" alt=""><h1>المحطة</h1><div class="mut">AL-MAHATTA</div></div>${tabs}${head}<div id="msg"></div>${body}<div style="height:18px"></div><button class="btn" id="go">${btn}</button>${foot}</div>`;
+    if (notice) note(notice, kind || 'note');
+    const $ = id => document.getElementById(id), on = (id, f) => { const e = $(id); if (e) e.onclick = f; };
+    const sw = m => () => { mode = m; draw(); };
+    on('ti', sw('in')); on('tu', sw('up')); on('fg', () => { email = val('em') || email; mode = 'forgot'; draw(); }); on('bk', sw('in'));
+    if ($('cd')) { $('cd').oninput = e => e.target.value = digits(e.target.value).slice(0, 6); $('cd').focus(); }
+    if (mode === 'verify' || mode === 'reset') startCd();
+    on('rs', async e => {
+      if (e.target.classList.contains('off')) return;
+      const r = mode === 'verify' ? await sb.auth.resend({ type: 'signup', email }) : await sb.auth.resetPasswordForEmail(email);
+      if (r.error) return note(authErr(r.error.message)); note('تم إرسال رمز جديد.', 'note'); startCd();
+    });
+    on('go', async e => {
+      const b = e.target; note('');
+      if (mode === 'in' || mode === 'up' || mode === 'forgot') email = val('em');
+      if (mode !== 'verify' && mode !== 'reset' && !email) return note('أدخل البريد الإلكتروني.');
+      busy(b, true);
+      try {
+        if (mode === 'in') {
+          const pw = $('pw').value; if (!pw) return note('أدخل كلمة المرور.');
+          const r = await sb.auth.signInWithPassword({ email, password: pw });
+          if (r.error) {
+            if (/not confirmed/i.test(r.error.message)) { await sb.auth.resend({ type: 'signup', email }); mode = 'verify'; return draw('حسابك غير مؤكد. أرسلنا إليك رمز تأكيد جديداً.'); }
+            return note(authErr(r.error.message));
+          }
+        } else if (mode === 'up') {
+          const pw = $('pw').value; if (!val('fn') || !val('ph')) return note('الاسم والهاتف مطلوبان.'); if (pw.length < 6) return note('كلمة المرور 6 أحرف على الأقل.');
+          const r = await sb.auth.signUp({ email, password: pw, options: { data: { full_name: val('fn'), phone: val('ph') } } });
+          if (r.error) return note(authErr(r.error.message));
+          if (!r.data.session) { mode = 'verify'; return draw(); }
+        } else if (mode === 'verify') {
+          const t = digits(val('cd')); if (t.length !== 6) return note('أدخل الرمز المكوّن من 6 أرقام.');
+          const r = await sb.auth.verifyOtp({ email, token: t, type: 'signup' });
+          if (r.error) return note(authErr(r.error.message));
+        } else if (mode === 'forgot') {
+          const r = await sb.auth.resetPasswordForEmail(email);
+          if (r.error) return note(authErr(r.error.message));
+          mode = 'reset'; return draw('إن كان البريد مسجّلاً فقد أرسلنا إليه الرمز.');
+        } else if (mode === 'reset') {
+          const t = digits(val('cd')), pw = $('pw').value; if (t.length !== 6) return note('أدخل الرمز المكوّن من 6 أرقام.'); if (pw.length < 6) return note('كلمة المرور 6 أحرف على الأقل.');
+          recovering = true;
+          const v = await sb.auth.verifyOtp({ email, token: t, type: 'recovery' });
+          if (v.error) { recovering = false; return note(authErr(v.error.message)); }
+          const u = await sb.auth.updateUser({ password: pw });
+          if (u.error) { recovering = false; await sb.auth.signOut(); return note(authErr(u.error.message)); }
+          recovering = false;
+          const { data } = await sb.auth.getSession(); await loadUser(data.session); toast('تم تغيير كلمة المرور'); go('#/'); route();
+        }
+      } finally { busy(b, false); }
+    });
   };
   draw();
 }
@@ -415,7 +471,7 @@ async function loadUser(session) {
 async function boot() {
   if (sb) {
     const { data } = await sb.auth.getSession(); await loadUser(data.session);
-    sb.auth.onAuthStateChange(async (ev, s) => { if (ev === 'INITIAL_SESSION') return; await loadUser(s); if (ev === 'SIGNED_OUT') go('#/'); route(); });
+    sb.auth.onAuthStateChange(async (ev, s) => { if (ev === 'INITIAL_SESSION' || recovering) return; await loadUser(s); if (ev === 'SIGNED_OUT') go('#/'); route(); });
   }
   window.addEventListener('hashchange', route);
   await route();
