@@ -15,13 +15,44 @@ const go = h => { location.hash = h; };
 const val = id => (document.getElementById(id)?.value || '').trim();
 const busy = (b, on) => { b.disabled = on; };
 
+
+/* ---------- الأيقونات (SVG احترافية) ---------- */
+const IC = {
+  bus:'<path d="M8 6v6"/><path d="M15 6v6"/><path d="M2 12h19.6"/><path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v10h3"/><circle cx="7" cy="18" r="2"/><path d="M9 18h5"/><circle cx="16" cy="18" r="2"/>',
+  package:'<path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+  building:'<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/>',
+  home:'<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+  banknote:'<rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/>',
+  shield:'<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  compass:'<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>',
+  landmark:'<line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/>',
+  truck:'<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
+  bed:'<path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/>',
+  bag:'<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>',
+  wrench:'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94z"/>',
+  megaphone:'<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+  bell:'<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  user:'<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  list:'<rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/>',
+  pin:'<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+  file:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8M16 13H8M16 17H8"/>',
+  chevron:'<path d="m9 18 6-6-6-6"/>',
+  wheel:'<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2"/><path d="M12 14v8M10.3 11 3 9.5M13.7 11 21 9.5"/>',
+  door:'<path d="M13 4h3a2 2 0 0 1 2 2v14"/><path d="M2 20h3"/><path d="M13 20h9"/><path d="M10 12v.01"/><path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z"/>',
+  ruler:'<path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2M11.5 9.5l2-2M8.5 6.5l2-2M17.5 15.5l2-2"/>'
+};
+const ico = (n, size = 24, sw = 1.8) => `<svg class="svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n] || IC.building}</svg>`;
+const OFFICE_IC = { travel:'bus', parcels:'package', realestate:'home', transfers:'banknote', security:'shield', tourism:'compass', gov:'landmark', shipping:'truck', hotels:'bed', market:'bag', cars:'wrench', ads:'megaphone' };
+const oIco = (slug, size) => ico(OFFICE_IC[slug] || 'building', size);
+const emptyBox = (n, t) => `<div class="empty"><div class="big">${ico(n, 46, 1.4)}</div>${t}</div>`;
+
 /* ---------- القوالب العامة ---------- */
-const top = (title, back = true) => `<div class="top">${back ? '<button class="back" onclick="history.back()">›</button>' : ''}<h2>${esc(title)}</h2></div>`;
+const top = (title, back = true) => `<div class="top">${back ? `<button class="back" onclick="history.back()">${ico('chevron',20,2.2)}</button>` : ''}<h2>${esc(title)}</h2></div>`;
 const nav = on => `<nav class="nav">
-  <a href="#/" class="${on==='home'?'on':''}"><span class="i">🏠</span>الرئيسية</a>
-  <a href="#/orders" class="${on==='orders'?'on':''}"><span class="i">📋</span>طلباتي</a>
-  <a href="#/notifs" class="${on==='notifs'?'on':''}"><span class="i">🔔</span>الإشعارات${unread?`<span class="bd">${unread}</span>`:''}</a>
-  <a href="#/me" class="${on==='me'?'on':''}"><span class="i">👤</span>حسابي</a></nav>`;
+  <a href="#/" class="${on==='home'?'on':''}"><span class="i">${ico('home',24)}</span>الرئيسية</a>
+  <a href="#/orders" class="${on==='orders'?'on':''}"><span class="i">${ico('list',24)}</span>طلباتي</a>
+  <a href="#/notifs" class="${on==='notifs'?'on':''}"><span class="i">${ico('bell',24)}</span>الإشعارات${unread?`<span class="bd">${unread}</span>`:''}</a>
+  <a href="#/me" class="${on==='me'?'on':''}"><span class="i">${ico('user',24)}</span>حسابي</a></nav>`;
 const shell = (html, on, title, back = true) => { $app.innerHTML = (title ? top(title, back) : '') + `<div class="main">${html}</div>` + nav(on); window.scrollTo(0, 0); };
 const loading = () => { $app.innerHTML = '<div class="spin">جارٍ التحميل…</div>'; };
 const need = () => { if (!user) { go('#/auth'); return false; } return true; };
@@ -72,7 +103,7 @@ async function viewHome() {
   <h3 class="sec">العروض والخدمات الأكثر طلباً</h3>
   ${(f.data||[]).map(x=>`<a class="card row" href="#/office/${esc(x.office_slug)}"><div class="grow"><b>${esc(x.title)}</b><div class="mut">${esc(x.description)}</div></div>${x.badge?`<span class="badge acc">${esc(x.badge)}</span>`:''}</a>`).join('') || '<div class="empty">لا توجد عروض حالياً</div>'}</div>` + nav('home');
   const draw = list => document.getElementById('grid').innerHTML = list.map(x =>
-    `<a class="tile" href="#/office/${esc(x.slug)}"><div class="ic" style="background:${esc(x.color)}22">${esc(x.icon)}</div><span>${esc(x.name_ar)}</span></a>`).join('') || '<div class="empty" style="grid-column:1/-1">لا نتائج</div>';
+    `<a class="tile" href="#/office/${esc(x.slug)}"><div class="ic" style="background:${esc(x.color)}1A;color:${esc(x.color)}">${oIco(x.slug,28)}</div><span>${esc(x.name_ar)}</span></a>`).join('') || '<div class="empty" style="grid-column:1/-1">لا نتائج</div>';
   draw(offices);
   document.getElementById('q').oninput = async e => {
     const q = e.target.value.trim();
@@ -99,7 +130,7 @@ async function viewOffice(slug) {
     sb.from('offers').select('*').eq('office_slug', slug).eq('active', true)]);
   const of = o.data; if (!of) return shell('<div class="empty">المكتب غير موجود</div>', 'home', 'المكتب');
   const acts = OFFICE_ACTIONS[slug] || [['تقديم طلب', `#/request/${slug}`]];
-  $app.innerHTML = top(of.name_ar) + `<div class="hero" style="background:linear-gradient(135deg,${esc(of.color)},#073548)"><div class="ic">${esc(of.icon)}</div><h1>${esc(of.name_ar)}</h1><p>${esc(of.description)}</p></div>
+  $app.innerHTML = top(of.name_ar) + `<div class="hero" style="background:linear-gradient(135deg,${esc(of.color)},#073548)"><div class="ic">${oIco(of.slug,48)}</div><h1>${esc(of.name_ar)}</h1><p>${esc(of.description)}</p></div>
   <div class="main"><h3 class="sec" style="margin-top:4px">الخدمات والأسعار</h3>
   ${(s.data||[]).map(x=>`<div class="card row between"><div><b>${esc(x.name)}</b></div><span class="price">${esc(x.price_text)}</span></div>`).join('')}
   ${(f.data||[]).length?'<h3 class="sec">العروض المتاحة</h3>'+f.data.map(x=>`<div class="card"><div class="row between"><b>${esc(x.title)}</b><span class="badge acc">${esc(x.price_text||x.badge||'عرض')}</span></div><div class="mut">${esc(x.description)}</div></div>`).join(''):''}
@@ -133,7 +164,7 @@ async function viewTrips() {
   const draw = f => shell(`<div class="chips"><button class="chip ${!f?'on':''}" data-c="">الكل</button>${cities.map(c=>`<button class="chip ${f===c?'on':''}" data-c="${esc(c)}">${esc(c)}</button>`).join('')}</div>
   ${(data||[]).filter(t=>!f||t.to_city===f).map(t=>`<div class="card"><div class="row"><svg class="bus" viewBox="0 0 64 40"><rect x="2" y="4" width="60" height="26" rx="7" fill="#0B4F6C"/><rect x="8" y="9" width="12" height="9" rx="2" fill="#bfe3f2"/><rect x="24" y="9" width="12" height="9" rx="2" fill="#bfe3f2"/><rect x="40" y="9" width="12" height="9" rx="2" fill="#bfe3f2"/><circle cx="16" cy="32" r="5" fill="#16222B"/><circle cx="48" cy="32" r="5" fill="#16222B"/></svg>
   <div class="grow"><div class="route">${esc(t.from_city)} <i>←</i> ${esc(t.to_city)}</div><div class="mut">${dt(t.depart_at)} · ${esc(t.bus_type)}</div></div></div>
-  <div class="row between" style="margin-top:12px"><span class="price" style="font-size:18px">${money(t.price)}</span><a class="btn sm" href="#/seats/${t.id}">اختيار الرحلة</a></div></div>`).join('') || '<div class="empty"><div class="big">🚌</div>لا توجد رحلات متاحة حالياً</div>'}`, 'home', 'خطوط الرحلات');
+  <div class="row between" style="margin-top:12px"><span class="price" style="font-size:18px">${money(t.price)}</span><a class="btn sm" href="#/seats/${t.id}">اختيار الرحلة</a></div></div>`).join('') || emptyBox('bus','لا توجد رحلات متاحة حالياً')}`, 'home', 'خطوط الرحلات');
   draw('');
   $app.onclick = function h(e) { const c = e.target.closest('.chip'); if (c) { draw(c.dataset.c); $app.onclick = h; } };
 }
@@ -153,7 +184,7 @@ async function viewSeats(id) {
   }
   shell(`<div class="card"><div class="route">${esc(trip.from_city)} <i>←</i> ${esc(trip.to_city)}</div><div class="mut">${dt(trip.depart_at)}</div></div>
   <div class="legend"><span><i style="background:#e8f5ee;border:2px solid #2E7D5B"></i>متاح</span><span><i style="background:#F5A623"></i>مختار</span><span><i style="background:#e3e7eb"></i>محجوز</span></div>
-  <div class="seatwrap"><div class="driver"><span>🚪 الباب</span><span>السائق 🧑‍✈️</span></div><div class="seats">${g}</div></div>
+  <div class="seatwrap"><div class="driver"><span class="row" style="gap:5px">${ico('door',16)}الباب</span><span class="row" style="gap:5px">السائق${ico('wheel',16)}</span></div><div class="seats">${g}</div></div>
   <div class="sum"><div class="row between"><span>المقاعد</span><b id="sl">—</b></div><div class="row between"><span>الإجمالي</span><b class="price" id="tot">${money(0)}</b></div></div>
   <div style="height:14px"></div><button class="btn" id="nx" disabled>متابعة</button>`, 'home', 'اختيار المقعد');
   $app.querySelector('.seats').onclick = e => {
@@ -250,7 +281,7 @@ async function viewProps() {
   let f = 'all';
   const draw = () => shell(`<div class="chips">${[['all','الكل'],['sale','بيع'],['rent','إيجار']].map(c=>`<button class="chip ${f===c[0]?'on':''}" data-f="${c[0]}">${c[1]}</button>`).join('')}</div>
   ${(data||[]).filter(p=>f==='all'||p.listing===f).map(p=>`<a class="card prop" href="#/prop/${p.id}">${p.image_url?`<img src="${esc(p.image_url)}" alt="" loading="lazy">`:'<div class="ph"></div>'}<div class="row between"><b>${esc(p.title)}</b><span class="badge ${p.listing==='sale'?'info':'ok'}">${p.listing==='sale'?'بيع':'إيجار'}</span></div>
-  <div class="mut">📍 ${esc(p.city)}${p.area?' - '+esc(p.area):''}</div><div style="margin:8px 0"><span class="pill">${esc(p.kind)}</span>${p.rooms?`<span class="pill">🛏 ${p.rooms}</span>`:''}${p.size_m2?`<span class="pill">${p.size_m2} م²</span>`:''}</div><div class="price" style="font-size:18px">${money(p.price)}${p.listing==='rent'?' / شهر':''}</div></a>`).join('') || '<div class="empty"><div class="big">🏠</div>لا توجد عقارات</div>'}`, 'home', 'العقارات');
+  <div class="mut row" style="gap:4px">${ico('pin',15)}${esc(p.city)}${p.area?' - '+esc(p.area):''}</div><div style="margin:8px 0"><span class="pill">${esc(p.kind)}</span>${p.rooms?`<span class="pill">${p.rooms} غرف</span>`:''}${p.size_m2?`<span class="pill">${p.size_m2} م²</span>`:''}</div><div class="price" style="font-size:18px">${money(p.price)}${p.listing==='rent'?' / شهر':''}</div></a>`).join('') || emptyBox('home','لا توجد عقارات')}`, 'home', 'العقارات');
   draw(); $app.onclick = e => { const c = e.target.closest('.chip'); if (c) { f = c.dataset.f; draw(); } };
 }
 async function viewProp(id) {
@@ -334,24 +365,24 @@ async function viewOrders() {
   const q = (t, s) => sb.from(t).select(s).order('created_at', { ascending: false }).limit(30);
   const [b, s, t, c, p, r] = await Promise.all([q('bookings', 'id,ref_no,status,created_at,total,trips(from_city,to_city)'), q('shipments', 'id,tracking_no,status,created_at,to_place'), q('transfers', 'id,ref_no,status,created_at,amount,currency'), q('security_requests', 'id,ref_no,status,created_at,service'), q('property_requests', 'id,ref_no,status,created_at,kind'), q('service_requests', 'id,ref_no,status,created_at,service_name')]);
   const all = [
-    ...(b.data||[]).map(x => ({ ic:'🚌', t:`حجز ${x.trips.from_city} ← ${x.trips.to_city}`, ref:x.ref_no, st:x.status, d:x.created_at, h:'#/booking/'+x.id })),
-    ...(s.data||[]).map(x => ({ ic:'📦', t:`إرسالية إلى ${x.to_place}`, ref:x.tracking_no, st:x.status, d:x.created_at, h:'#/ship/'+x.id })),
-    ...(t.data||[]).map(x => ({ ic:'💸', t:`تحويل ${Number(x.amount).toLocaleString('ar-EG')} ${x.currency}`, ref:x.ref_no, st:x.status, d:x.created_at, h:'#/transfer/'+x.id })),
-    ...(c.data||[]).map(x => ({ ic:'🛡️', t:x.service, ref:x.ref_no, st:x.status, d:x.created_at, h:'#/security/'+x.id })),
-    ...(p.data||[]).map(x => ({ ic:'🏠', t:x.kind==='viewing'?'طلب معاينة عقار':'طلب حجز عقار', ref:x.ref_no, st:x.status, d:x.created_at, h:'#/orders' })),
-    ...(r.data||[]).map(x => ({ ic:'🧾', t:x.service_name, ref:x.ref_no, st:x.status, d:x.created_at, h:'#/orders' }))
+    ...(b.data||[]).map(x => ({ ic:'bus', t:`حجز ${x.trips.from_city} ← ${x.trips.to_city}`, ref:x.ref_no, st:x.status, d:x.created_at, h:'#/booking/'+x.id })),
+    ...(s.data||[]).map(x => ({ ic:'package', t:`إرسالية إلى ${x.to_place}`, ref:x.tracking_no, st:x.status, d:x.created_at, h:'#/ship/'+x.id })),
+    ...(t.data||[]).map(x => ({ ic:'banknote', t:`تحويل ${Number(x.amount).toLocaleString('ar-EG')} ${x.currency}`, ref:x.ref_no, st:x.status, d:x.created_at, h:'#/transfer/'+x.id })),
+    ...(c.data||[]).map(x => ({ ic:'shield', t:x.service, ref:x.ref_no, st:x.status, d:x.created_at, h:'#/security/'+x.id })),
+    ...(p.data||[]).map(x => ({ ic:'home', t:x.kind==='viewing'?'طلب معاينة عقار':'طلب حجز عقار', ref:x.ref_no, st:x.status, d:x.created_at, h:'#/orders' })),
+    ...(r.data||[]).map(x => ({ ic:'file', t:x.service_name, ref:x.ref_no, st:x.status, d:x.created_at, h:'#/orders' }))
   ].sort((a, b) => new Date(b.d) - new Date(a.d));
-  shell(all.map(x => `<a class="card row" href="${x.h}"><div style="font-size:28px">${x.ic}</div><div class="grow"><b>${esc(x.t)}</b><div class="mut" dir="ltr" style="text-align:right">${esc(x.ref)} · ${dt(x.d)}</div></div>${badge(x.st)}</a>`).join('') || '<div class="empty"><div class="big">📋</div>لا توجد طلبات بعد</div>', 'orders', 'طلباتي', false);
+  shell(all.map(x => `<a class="card row" href="${x.h}"><div class="oic">${ico(x.ic,24)}</div><div class="grow"><b>${esc(x.t)}</b><div class="mut" dir="ltr" style="text-align:right">${esc(x.ref)} · ${dt(x.d)}</div></div>${badge(x.st)}</a>`).join('') || emptyBox('list','لا توجد طلبات بعد'), 'orders', 'طلباتي', false);
 }
 async function viewNotifs() {
   if (!need()) return; loading();
   const { data } = await sb.from('notifications').select('*').order('created_at', { ascending: false }).limit(50);
-  shell((data||[]).map(n => `<div class="card notif ${n.read?'':'unread'}"><b>${esc(n.title)}</b><div class="mut">${esc(n.body)}</div><div class="mut" style="font-size:12px;margin-top:4px">${dt(n.created_at)}</div></div>`).join('') || '<div class="empty"><div class="big">🔔</div>لا توجد إشعارات</div>', 'notifs', 'الإشعارات', false);
+  shell((data||[]).map(n => `<div class="card notif ${n.read?'':'unread'}"><b>${esc(n.title)}</b><div class="mut">${esc(n.body)}</div><div class="mut" style="font-size:12px;margin-top:4px">${dt(n.created_at)}</div></div>`).join('') || emptyBox('bell','لا توجد إشعارات'), 'notifs', 'الإشعارات', false);
   if ((data||[]).some(n => !n.read)) { await sb.from('notifications').update({ read: true }).eq('read', false); unread = 0; }
 }
 async function viewMe() {
   if (!need()) return;
-  shell(`<div class="card"><div class="row"><div style="font-size:40px">👤</div><div><b>${esc(user.full_name||'مستخدم')}</b><div class="mut" dir="ltr" style="text-align:right">${esc(user.email)}</div></div></div></div>
+  shell(`<div class="card"><div class="row"><div class="oic" style="width:52px;height:52px">${ico('user',28)}</div><div><b>${esc(user.full_name||'مستخدم')}</b><div class="mut" dir="ltr" style="text-align:right">${esc(user.email)}</div></div></div></div>
   <label>الاسم</label><input id="fn" value="${esc(user.full_name||'')}"><label>الهاتف</label><input id="ph" type="tel" dir="ltr" value="${esc(user.phone||'')}"><label>المدينة</label><input id="ct" value="${esc(user.city||'')}">
   <div style="height:14px"></div><button class="btn" id="sv">حفظ</button><div style="height:10px"></div><button class="btn ghost" id="lo">تسجيل الخروج</button>`, 'me', 'حسابي', false);
   document.getElementById('sv').onclick = async () => { const { error } = await sb.from('profiles').update({ full_name: val('fn'), phone: val('ph'), city: val('ct') }).eq('id', user.id); if (error) return toast(errMsg(error)); Object.assign(user, { full_name: val('fn'), phone: val('ph'), city: val('ct') }); toast('تم الحفظ'); };
@@ -362,7 +393,7 @@ async function viewMe() {
 async function route() {
   if (!sb) { $app.innerHTML = '<div class="auth"><div class="err">لم يتم ضبط اتصال Supabase. تأكد من إضافة الأسرار SUPABASE_URL و SUPABASE_ANON_KEY في المستودع ثم أعد النشر.</div></div>'; return; }
   const h = (location.hash || '#/').slice(1), [, a, b] = h.split('/');
-  if (!user && !['auth', 'trips', 'seats', 'office', 'props', 'prop', ''].includes(a || '')) return go('#/auth');
+  if (!user && a !== 'auth') return go('#/auth');
   if (user && a === 'auth') return go('#/');
   const map = {
     '': () => viewHome(), auth: viewAuth, office: () => viewOffice(b), request: () => viewRequest(b),
