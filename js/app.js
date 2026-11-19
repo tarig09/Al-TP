@@ -216,13 +216,22 @@ async function viewRequest(slug) {
 async function viewTrips() {
   loading();
   const { data } = await sb.from('trips').select('*').eq('active', true).gt('depart_at', new Date().toISOString()).order('depart_at');
-  const cities = [...new Set((data||[]).map(t => t.to_city))];
-  const draw = f => shell(`<div class="chips"><button class="chip ${!f?'on':''}" data-c="">الكل</button>${cities.map(c=>`<button class="chip ${f===c?'on':''}" data-c="${esc(c)}">${esc(c)}</button>`).join('')}</div>
-  ${(data||[]).filter(t=>!f||t.to_city===f).map(t=>`<div class="card"><div class="row"><svg class="bus" viewBox="0 0 64 40"><rect x="2" y="4" width="60" height="26" rx="7" fill="#0B4F6C"/><rect x="8" y="9" width="12" height="9" rx="2" fill="#bfe3f2"/><rect x="24" y="9" width="12" height="9" rx="2" fill="#bfe3f2"/><rect x="40" y="9" width="12" height="9" rx="2" fill="#bfe3f2"/><circle cx="16" cy="32" r="5" fill="#16222B"/><circle cx="48" cy="32" r="5" fill="#16222B"/></svg>
-  <div class="grow"><div class="route">${esc(t.from_city)} <i>←</i> ${esc(t.to_city)}</div><div class="mut">${dt(t.depart_at)} · ${esc(t.bus_type)}</div></div></div>
-  <div class="row between" style="margin-top:12px"><span class="price" style="font-size:18px">${money(t.price)}</span><a class="btn sm" href="#/seats/${t.id}">اختيار الرحلة</a></div></div>`).join('') || emptyBox('bus','لا توجد رحلات متاحة حالياً')}`, 'home', 'خطوط الرحلات');
-  draw('');
-  $app.onclick = function h(e) { const c = e.target.closest('.chip'); if (c) { draw(c.dataset.c); $app.onclick = h; } };
+  const all = data || [];
+  const froms = [...new Set(all.map(t => t.from_city))], tos = [...new Set(all.map(t => t.to_city))];
+  const dkey = iso => { const d = new Date(iso), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; };
+  const opt = (arr, ph) => `<option value="">${ph}</option>` + arr.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  shell(`<div class="card"><label style="margin-top:0">من</label><select id="tf">${opt(froms, 'كل المدن')}</select>
+  <label>إلى (الوجهة)</label><select id="tt">${opt(tos, 'كل الوجهات')}</select>
+  <label>تاريخ السفر</label><input id="td" type="date" min="${dkey(new Date())}"></div><div id="tl"></div>`, 'home', 'حجز رحلة');
+  const draw = () => {
+    const f = val('tf'), t = val('tt'), d = val('td');
+    const rows = all.filter(x => (!f || x.from_city === f) && (!t || x.to_city === t) && (!d || dkey(x.depart_at) === d));
+    document.getElementById('tl').innerHTML = rows.map(x => `<div class="card"><div class="row"><svg class="bus" viewBox="0 0 64 40"><rect x="2" y="4" width="60" height="26" rx="7" fill="#0B4F6C"/><rect x="8" y="9" width="12" height="9" rx="2" fill="#bfe3f2"/><rect x="24" y="9" width="12" height="9" rx="2" fill="#bfe3f2"/><rect x="40" y="9" width="12" height="9" rx="2" fill="#bfe3f2"/><circle cx="16" cy="32" r="5" fill="#16222B"/><circle cx="48" cy="32" r="5" fill="#16222B"/></svg>
+    <div class="grow"><div class="route">${esc(x.from_city)} <i>←</i> ${esc(x.to_city)}</div><div class="mut">${dt(x.depart_at)} · ${esc(x.bus_type)}</div></div></div>
+    <div class="row between" style="margin-top:12px"><span class="price" style="font-size:18px">${money(x.price)}</span><a class="btn sm" href="#/seats/${x.id}">اختيار الرحلة</a></div></div>`).join('') || emptyBox('bus', d || f || t ? 'لا توجد رحلات بهذه المواصفات، جرّب تاريخاً أو وجهة أخرى' : 'لا توجد رحلات متاحة حالياً');
+  };
+  ['tf', 'tt', 'td'].forEach(id => document.getElementById(id).onchange = draw);
+  draw();
 }
 
 const bookingDraft = {};
@@ -256,12 +265,13 @@ function viewPassenger() {
   if (!need() || !bookingDraft.trip) return go('#/trips');
   const d = bookingDraft;
   shell(`<div class="card"><b>${esc(d.trip.from_city)} ← ${esc(d.trip.to_city)}</b><div class="mut">المقاعد: ${d.seats.join('، ')} · ${money(d.seats.length * d.trip.price)}</div></div>
-  <div id="msg"></div><label>اسم المسافر</label><input id="pn" value="${esc(user.full_name||'')}"><label>رقم الهاتف</label><input id="pp" type="tel" dir="ltr" value="${esc(user.phone||'')}">
+  <div id="msg"></div><label>اسم المسافر</label><input id="pn" value="${esc(user.full_name||'')}"><label>رقم الهاتف</label><input id="pp" type="tel" inputmode="tel" dir="ltr" value="${esc(user.phone||'')}">
+  <label>رقم الواتساب</label><input id="pw" type="tel" inputmode="tel" dir="ltr" value="${esc(user.phone||'')}">
   <label>رقم الهوية / الجواز (اختياري)</label><input id="pi" dir="ltr"><div style="height:16px"></div><button class="btn" id="go">تأكيد الحجز</button>`, 'home', 'بيانات المسافر');
   document.getElementById('go').onclick = async e => {
-    if (!val('pn') || !val('pp')) return toast('الاسم والهاتف مطلوبان');
+    if (!val('pn') || !val('pp') || !val('pw')) return toast('الاسم والهاتف والواتساب مطلوبة');
     busy(e.target, true);
-    const { data, error } = await sb.rpc('create_booking', { p_trip: d.trip.id, p_seats: d.seats, p_name: val('pn'), p_phone: val('pp'), p_id_no: val('pi') || null });
+    const { data, error } = await sb.rpc('create_booking', { p_trip: d.trip.id, p_seats: d.seats, p_name: val('pn'), p_phone: val('pp'), p_id_no: val('pi') || null, p_whatsapp: val('pw') });
     busy(e.target, false); if (error) { toast(errMsg(error)); if (error.message === 'seat_taken') go('#/seats/' + d.trip.id); return; }
     delete bookingDraft.trip; go('#/booking/' + data.id);
   };
@@ -273,11 +283,13 @@ async function viewBooking(id) {
   if (!b) return shell('<div class="empty">الحجز غير موجود</div>', 'orders', 'التذكرة');
   const { data: pay } = await sb.from('app_settings').select('value').eq('key', 'payment_info').maybeSingle();
   const t = b.trips;
+  const live = b.status !== 'cancelled';
   shell(`<div class="ticket"><div class="h"><div class="row between"><b>تذكرة سفر</b>${badge(b.status)}</div><div class="route" style="margin-top:8px">${esc(t.from_city)} <i>←</i> ${esc(t.to_city)}</div></div>
-  <div class="b"><div class="kv"><span>رقم الحجز</span><b dir="ltr">${esc(b.ref_no)}</b></div><div class="kv"><span>المسافر</span><b>${esc(b.passenger_name)}</b></div>
-  <div class="kv"><span>الموعد</span><b>${dt(t.depart_at)}</b></div><div class="kv"><span>المقاعد</span><b>${b.seats.join('، ')}</b></div><div class="kv"><span>الإجمالي</span><b class="price">${money(b.total)}</b></div></div></div>
+  <div class="b"><div class="kv"><span>المسافر</span><b>${esc(b.passenger_name)}</b></div><div class="kv"><span>الهاتف</span><b dir="ltr">${esc(b.passenger_phone)}</b></div>${b.passenger_whatsapp?`<div class="kv"><span>الواتساب</span><b dir="ltr">${esc(b.passenger_whatsapp)}</b></div>`:''}
+  <div class="kv"><span>تاريخ ووقت السفر</span><b>${dt(t.depart_at)}</b></div><div class="kv"><span>المقاعد</span><b>${b.seats.join('، ')}</b></div><div class="kv"><span>الإجمالي</span><b class="price">${money(b.total)}</b></div></div>
+  <div class="qr">${live ? makeQR('MAHATTA|' + b.ref_no, 190) : '<div class="mut" style="padding:30px 0">التذكرة ملغاة</div>'}<div class="refno" dir="ltr">${esc(b.ref_no)}</div><div class="mut" style="font-size:12px">${b.status==='confirmed' ? 'تذكرة مؤكدة — أبرز الباركود عند الصعود' : live ? 'تصبح سارية بعد تأكيد الدفع' : ''}</div></div></div>
   ${b.status==='pending'?`<h3 class="sec">إثبات الدفع</h3><div class="note">${esc(pay?.value||'')}</div><label>صورة إشعار الدفع</label><input type="file" id="fl" accept="image/*,application/pdf"><div style="height:12px"></div><button class="btn acc" id="up">رفع إثبات الدفع</button><div style="height:10px"></div><button class="btn ghost" id="cn">إلغاء الحجز</button>`
-  : b.status==='payment_review'?'<div class="note">تم استلام إثبات الدفع وهو قيد المراجعة. سنُعلمك فور التأكيد.</div>':''}`, 'orders', 'تفاصيل الحجز');
+  : b.status==='payment_review'?'<div class="note">تم استلام إثبات الدفع وهو قيد المراجعة. سنُعلمك فور التأكيد.</div>':''}`, 'orders', 'التذكرة');
   const up = document.getElementById('up');
   if (up) up.onclick = async () => {
     const f = document.getElementById('fl').files[0]; if (!f) return toast('اختر ملفاً أولاً'); if (f.size > 5 * 1024 * 1024) return toast('الحجم الأقصى 5 ميغابايت');
