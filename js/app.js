@@ -281,15 +281,23 @@ async function viewBooking(id) {
   if (!need()) return; loading();
   const { data: b } = await sb.from('bookings').select('*, trips(*)').eq('id', id).single();
   if (!b) return shell('<div class="empty">الحجز غير موجود</div>', 'orders', 'التذكرة');
-  const { data: pay } = await sb.from('app_settings').select('value').eq('key', 'payment_info').maybeSingle();
+  const [{ data: pay }, { data: pm }] = await Promise.all([sb.from('app_settings').select('value').eq('key', 'payment_info').maybeSingle(), sb.from('payment_methods').select('*').eq('active', true).order('sort')]);
+  const methods = (pm || []).map(m => `<div class="card pay"><div class="row between"><b>${esc(m.name)}</b><button class="btn sm ghost" data-copy="${esc(m.account_no)}">نسخ الرقم</button></div>
+    <div class="acc" dir="ltr">${esc(m.account_no)}</div>${m.holder ? `<div class="mut">باسم: ${esc(m.holder)}</div>` : ''}${m.note ? `<div class="mut" style="font-size:13px;margin-top:4px">${esc(m.note)}</div>` : ''}</div>`).join('');
   const t = b.trips;
   const live = b.status !== 'cancelled';
   shell(`<div class="ticket"><div class="h"><div class="row between"><b>تذكرة سفر</b>${badge(b.status)}</div><div class="route" style="margin-top:8px">${esc(t.from_city)} <i>←</i> ${esc(t.to_city)}</div></div>
   <div class="b"><div class="kv"><span>المسافر</span><b>${esc(b.passenger_name)}</b></div><div class="kv"><span>الهاتف</span><b dir="ltr">${esc(b.passenger_phone)}</b></div>${b.passenger_whatsapp?`<div class="kv"><span>الواتساب</span><b dir="ltr">${esc(b.passenger_whatsapp)}</b></div>`:''}
   <div class="kv"><span>تاريخ ووقت السفر</span><b>${dt(t.depart_at)}</b></div><div class="kv"><span>المقاعد</span><b>${b.seats.join('، ')}</b></div><div class="kv"><span>الإجمالي</span><b class="price">${money(b.total)}</b></div></div>
   <div class="qr">${live ? makeQR('MAHATTA|' + b.ref_no, 190) : '<div class="mut" style="padding:30px 0">التذكرة ملغاة</div>'}<div class="refno" dir="ltr">${esc(b.ref_no)}</div><div class="mut" style="font-size:12px">${b.status==='confirmed' ? 'تذكرة مؤكدة — أبرز الباركود عند الصعود' : live ? 'تصبح سارية بعد تأكيد الدفع' : ''}</div></div></div>
-  ${b.status==='pending'?`<h3 class="sec">إثبات الدفع</h3><div class="note">${esc(pay?.value||'')}</div><label>صورة إشعار الدفع</label><input type="file" id="fl" accept="image/*,application/pdf"><div style="height:12px"></div><button class="btn acc" id="up">رفع إثبات الدفع</button><div style="height:10px"></div><button class="btn ghost" id="cn">إلغاء الحجز</button>`
+  ${b.status==='pending'?`<h3 class="sec">طريقة الدفع</h3><div class="note">المبلغ المطلوب تحويله: <b>${money(b.total)}</b>${pay?.value ? '<br>' + esc(pay.value) : ''}</div>${methods || '<div class="note">سيتم تزويدك بوسيلة الدفع من الإدارة، تواصل مع المكتب.</div>'}<h3 class="sec">إثبات الدفع</h3><label style="margin-top:0">صورة إشعار الدفع</label><input type="file" id="fl" accept="image/*,application/pdf"><div style="height:12px"></div><button class="btn acc" id="up">رفع إثبات الدفع</button><div style="height:10px"></div><button class="btn ghost" id="cn">إلغاء الحجز</button>`
   : b.status==='payment_review'?'<div class="note">تم استلام إثبات الدفع وهو قيد المراجعة. سنُعلمك فور التأكيد.</div>':''}`, 'orders', 'التذكرة');
+  $app.querySelectorAll('[data-copy]').forEach(btn => btn.onclick = async () => {
+    const t = btn.dataset.copy;
+    try { await navigator.clipboard.writeText(t); }
+    catch (_) { const a = document.createElement('textarea'); a.value = t; a.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); } catch (__) {} a.remove(); }
+    toast('تم نسخ رقم الحساب');
+  });
   const up = document.getElementById('up');
   if (up) up.onclick = async () => {
     const f = document.getElementById('fl').files[0]; if (!f) return toast('اختر ملفاً أولاً'); if (f.size > 5 * 1024 * 1024) return toast('الحجم الأقصى 5 ميغابايت');
