@@ -145,29 +145,42 @@ function viewAuth() {
 }
 
 /* ---------- الرئيسية ---------- */
+const lsGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (_) { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} };
+const lsDel = k => { try { localStorage.removeItem(k); } catch (_) {} };
+const onHome = () => ['', '#', '#/'].includes(location.hash);
+
 async function viewHome() {
-  loading();
+  const paint = d => {
+    offices = d.o;
+    $app.innerHTML = `<div class="brand"><img src="assets/logo.svg" alt=""><div><b>المحطة</b><small>AL-MAHATTA</small></div></div>
+    <div class="search"><input id="q" placeholder="ابحث عن خدمة أو مكتب…" autocomplete="off"></div>
+    <div class="main"><div class="banners">${d.b.map(x=>`<a class="banner" href="${esc(x.link||'#/')}" style="background:linear-gradient(135deg,${esc(x.color)},#073548)"><b>${esc(x.title)}</b><span>${esc(x.subtitle)}</span></a>`).join('')}</div>
+    <h3 class="sec">المكاتب</h3><div class="grid" id="grid"></div>
+    <h3 class="sec">العروض والخدمات الأكثر طلباً</h3>
+    ${d.f.map(x=>`<a class="card row" href="#/office/${esc(x.office_slug)}"><div class="grow"><b>${esc(x.title)}</b><div class="mut">${esc(x.description)}</div></div>${x.badge?`<span class="badge acc">${esc(x.badge)}</span>`:''}</a>`).join('') || '<div class="empty">لا توجد عروض حالياً</div>'}</div>` + nav('home');
+    const draw = list => document.getElementById('grid').innerHTML = list.map(x =>
+      `<a class="tile" href="#/office/${esc(x.slug)}"><div class="ic" style="background:${esc(x.color)}1A;color:${esc(x.color)}">${oIco(x.slug,28)}</div><span>${esc(x.name_ar)}</span></a>`).join('') || '<div class="empty" style="grid-column:1/-1">لا نتائج</div>';
+    draw(offices);
+    document.getElementById('q').oninput = async e => {
+      const q = e.target.value.trim();
+      if (!q) return draw(offices);
+      const { data } = await sb.from('services').select('office_slug,name').ilike('name', `%${q.replace(/[%,]/g,'')}%`);
+      const slugs = new Set((data||[]).map(s => s.office_slug));
+      draw(offices.filter(x => x.name_ar.includes(q) || slugs.has(x.slug)));
+    };
+  };
+  const cached = lsGet('home_v1');
+  if (cached) paint(cached); else loading();
   const [o, b, f] = await Promise.all([
     sb.from('offices').select('*').eq('active', true).order('sort'),
     sb.from('banners').select('*').eq('active', true).order('sort'),
     sb.from('offers').select('*').eq('active', true).order('popular', { ascending: false }).limit(6)]);
-  offices = o.data || [];
-  $app.innerHTML = `<div class="brand"><img src="assets/logo.svg" alt=""><div><b>المحطة</b><small>AL-MAHATTA</small></div></div>
-  <div class="search"><input id="q" placeholder="ابحث عن خدمة أو مكتب…" autocomplete="off"></div>
-  <div class="main"><div class="banners">${(b.data||[]).map(x=>`<a class="banner" href="${esc(x.link||'#/')}" style="background:linear-gradient(135deg,${esc(x.color)},#073548)"><b>${esc(x.title)}</b><span>${esc(x.subtitle)}</span></a>`).join('')}</div>
-  <h3 class="sec">المكاتب</h3><div class="grid" id="grid"></div>
-  <h3 class="sec">العروض والخدمات الأكثر طلباً</h3>
-  ${(f.data||[]).map(x=>`<a class="card row" href="#/office/${esc(x.office_slug)}"><div class="grow"><b>${esc(x.title)}</b><div class="mut">${esc(x.description)}</div></div>${x.badge?`<span class="badge acc">${esc(x.badge)}</span>`:''}</a>`).join('') || '<div class="empty">لا توجد عروض حالياً</div>'}</div>` + nav('home');
-  const draw = list => document.getElementById('grid').innerHTML = list.map(x =>
-    `<a class="tile" href="#/office/${esc(x.slug)}"><div class="ic" style="background:${esc(x.color)}1A;color:${esc(x.color)}">${oIco(x.slug,28)}</div><span>${esc(x.name_ar)}</span></a>`).join('') || '<div class="empty" style="grid-column:1/-1">لا نتائج</div>';
-  draw(offices);
-  document.getElementById('q').oninput = async e => {
-    const q = e.target.value.trim();
-    if (!q) return draw(offices);
-    const { data } = await sb.from('services').select('office_slug,name').ilike('name', `%${q.replace(/[%,]/g,'')}%`);
-    const slugs = new Set((data||[]).map(s => s.office_slug));
-    draw(offices.filter(x => x.name_ar.includes(q) || slugs.has(x.slug)));
-  };
+  if (o.error || b.error || f.error) { if (!cached) shell('<div class="empty">تعذّر تحميل البيانات، تحقق من الاتصال بالإنترنت ثم أعد المحاولة.</div>', 'home', 'المحطة', false); return; }
+  const d = { o: o.data || [], b: b.data || [], f: f.data || [] };
+  lsSet('home_v1', d);
+  const q = document.getElementById('q');
+  if (onHome() && (!cached || (JSON.stringify(cached) !== JSON.stringify(d) && !(q && q.value)))) paint(d);
 }
 
 /* ---------- صفحة المكتب ---------- */
@@ -491,11 +504,17 @@ async function loadUser(session) {
 async function boot() {
   if (sb) {
     const { data } = await sb.auth.getSession(); await loadUser(data.session);
-    sb.auth.onAuthStateChange(async (ev, s) => { if (ev === 'INITIAL_SESSION' || recovering) return; await loadUser(s); if (ev === 'SIGNED_OUT') go('#/'); route(); });
+    sb.auth.onAuthStateChange((ev, s) => {
+      if (ev === 'INITIAL_SESSION' || recovering) return;
+      /* عند العودة من معرض الصور يُعيد Supabase إرسال SIGNED_IN لنفس المستخدم؛ لا نُعيد رسم الصفحة حتى لا يضيع الملف المختار */
+      const same = s && user && s.user.id === user.id;
+      if (ev === 'TOKEN_REFRESHED' || (same && (ev === 'SIGNED_IN' || ev === 'USER_UPDATED'))) return;
+      setTimeout(async () => { await loadUser(s); if (ev === 'SIGNED_OUT') { lsDel('home_v1'); go('#/'); } route(); }, 0);
+    });
   }
   window.addEventListener('hashchange', route);
+  setTimeout(() => document.getElementById('splash').classList.add('hide'), 350);
   await route();
-  setTimeout(() => document.getElementById('splash').classList.add('hide'), 700);
 }
 boot();
 })();
