@@ -496,7 +496,7 @@ declare t text;
 begin
   foreach t in array array['offices','services','offers','banners','app_settings','trips','properties'] loop
     execute format('drop policy if exists %I on public.%I', t || '_read', t);
-    execute format('create policy %I on public.%I for select to anon, authenticated using (true)', t || '_read', t);
+    execute format('create policy %I on public.%I for select to authenticated using (true)', t || '_read', t);
     execute format('drop policy if exists %I on public.%I', t || '_admin', t);
     execute format('create policy %I on public.%I for all to authenticated using (public.is_admin()) with check (public.is_admin())', t || '_admin', t);
   end loop;
@@ -504,7 +504,7 @@ end $$;
 
 -- المقاعد المحجوزة (أرقام فقط) مرئية للجميع لعرض الخريطة
 drop policy if exists booking_seats_read on public.booking_seats;
-create policy booking_seats_read on public.booking_seats for select to anon, authenticated using (true);
+create policy booking_seats_read on public.booking_seats for select to authenticated using (true);
 
 -- جداول المستخدم: يرى ويُنشئ ما يخصه، والإدارة ترى وتعدّل الكل
 do $$

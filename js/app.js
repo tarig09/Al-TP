@@ -64,7 +64,7 @@ const copyBtns = () => $app.querySelectorAll('[data-copy]').forEach(btn => btn.o
   catch (_) { const a = document.createElement('textarea'); a.value = t; a.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); } catch (__) {} a.remove(); }
   toast('تم نسخ رقم الحساب');
 });
-const payCards = (all, aid) => all.filter(m => m.agency_id === aid).map(m => `<div class="card pay"><div class="row between"><b>${esc(m.name)}</b><button class="btn sm ghost" data-copy="${esc(m.account_no)}">نسخ الرقم</button></div>
+const payCards = (all, aid) => all.filter(m => (m.agency_id || null) === (aid || null)).map(m => `<div class="card pay"><div class="row between"><b>${esc(m.name)}</b><button class="btn sm ghost" data-copy="${esc(m.account_no)}">نسخ الرقم</button></div>
   <div class="acc" dir="ltr">${esc(m.account_no)}</div>${m.holder ? `<div class="mut">باسم: ${esc(m.holder)}</div>` : ''}${m.note ? `<div class="mut" style="font-size:13px;margin-top:4px">${esc(m.note)}</div>` : ''}</div>`).join('');
 const emptyBox = (n, t) => `<div class="empty"><div class="big">${ico(n, 46, 1.4)}</div>${t}</div>`;
 
@@ -180,7 +180,7 @@ async function viewHome() {
     <div class="main"><div class="banners">${d.b.map(x=>`<a class="banner" href="${esc(x.link||'#/')}" style="background:linear-gradient(135deg,${esc(x.color)},#073548)"><b>${esc(x.title)}</b><span>${esc(x.subtitle)}</span></a>`).join('')}</div>
     <h3 class="sec">المكاتب</h3><div class="grid" id="grid"></div>
     ${d.f.length ? `<h3 class="sec">عروض المكاتب</h3>
-    ${d.f.map(x=>`<a class="card row" href="#/agency/${esc(x.agency_id)}"><div class="grow"><b>${esc(x.title)}</b><div class="mut">${esc(x.agencies?.name||'')}${x.description?' · '+esc(x.description):''}</div></div>${x.price_text||x.badge?`<span class="badge acc">${esc(x.price_text||x.badge)}</span>`:''}</a>`).join('')}` : ''}</div>` + nav('home');
+    ${d.f.map(x=>`<a class="card row" href="${x.agency_id ? '#/agency/' + esc(x.agency_id) : '#/office/' + esc(x.office_slug || '')}"><div class="grow"><b>${esc(x.title)}</b><div class="mut">${esc(x.agencies?.name||'')}${x.description?' · '+esc(x.description):''}</div></div>${x.price_text||x.badge?`<span class="badge acc">${esc(x.price_text||x.badge)}</span>`:''}</a>`).join('')}` : ''}</div>` + nav('home');
     const draw = list => document.getElementById('grid').innerHTML = list.map(x =>
       `<a class="tile" href="#/office/${esc(x.slug)}"><div class="ic" style="background:${esc(x.color)}1A;color:${esc(x.color)}">${oIco(x.slug,28)}</div><span>${esc(x.name_ar)}</span></a>`).join('') || '<div class="empty" style="grid-column:1/-1">لا نتائج</div>';
     draw(offices);
@@ -197,7 +197,7 @@ async function viewHome() {
   const [o, b, f] = await Promise.all([
     sb.from('offices').select('*').eq('active', true).order('sort'),
     sb.from('banners').select('*').eq('active', true).order('sort'),
-    sb.from('offers').select('*, agencies(name,is_open)').eq('active', true).not('agency_id', 'is', null).order('created_at', { ascending: false }).limit(8)]);
+    sb.from('offers').select('*, agencies(name,is_open)').eq('active', true).order('created_at', { ascending: false }).limit(8)]);
   if (o.error || b.error || f.error) { if (!cached) shell('<div class="empty">تعذّر تحميل البيانات، تحقق من الاتصال بالإنترنت ثم أعد المحاولة.</div>', 'home', 'المحطة', false); return; }
   const d = { o: o.data || [], b: b.data || [], f: f.data || [] };
   lsSet('home_v2', d);
@@ -215,21 +215,31 @@ async function viewOffice(slug) {
     sb.from('agencies').select('*').eq('section_slug', slug).eq('active', true),
     sb.from('offers').select('*').eq('office_slug', slug).eq('active', true)]);
   const of = o.data; if (!of) return shell('<div class="empty">القسم غير موجود</div>', 'home', 'القسم');
-  if (!['travel', 'parcels', 'realestate', 'transfers', 'security'].includes(slug)) return viewOfficeLegacy(of);
+  if (!of.use_agencies) return viewOfficeLegacy(of);
   const list = (ag.data || []).sort((x, y) => (y.is_open - x.is_open) || (y.rating_avg - x.rating_avg) || (x.sort - y.sort));
   const offs = f.data || [];
   const best = id => offs.find(x => x.agency_id === id);
   $app.innerHTML = top(of.name_ar) + `<div class="hero" style="background:linear-gradient(135deg,${esc(of.color)},#073548)"><div class="ic">${oIco(of.slug,40)}</div><h1>${esc(of.name_ar)}</h1><p>اختر المكتب الذي تريد التعامل معه</p></div>
   <div class="main">${list.map(a => { const b = best(a.id); return `<a class="card agcard ${a.is_open ? '' : 'closed'}" href="#/agency/${a.id}"><div class="row">${logoBox(a)}<div class="grow"><div class="row between"><b>${esc(a.name)}</b><span class="badge ${a.is_open ? 'ok' : 'bad'}">${a.is_open ? 'مفتوح' : 'مغلق'}</span></div><div>${stars(a.rating_avg, a.rating_count)}</div></div></div>${b ? `<div class="agoffer"><span class="badge acc">${esc(b.badge || 'عرض')}</span> ${esc(b.title)}${b.price_text ? ' · <b>' + esc(b.price_text) + '</b>' : ''}</div>` : ''}</a>`; }).join('') || emptyBox('building', 'لا توجد مكاتب في هذا القسم حالياً')}</div>` + nav('home');
 }
+const DIRECT_ACTIONS = {
+  travel: [['حجز رحلة', '#/trips']],
+  parcels: [['تسجيل إرسالية جديدة', '#/ship/new'], ['تتبع إرسالية', '#/ship/track']],
+  realestate: [['تصفح العقارات', '#/props']],
+  transfers: [['تحويل جديد', '#/transfer/new']],
+  security: [['تقديم طلب موافقة', '#/security/new']]
+};
 async function viewOfficeLegacy(of) {
   const slug = of.slug;
-  const [s, f] = await Promise.all([sb.from('services').select('*').eq('office_slug', slug).eq('active', true).order('sort'), sb.from('offers').select('*').eq('office_slug', slug).eq('active', true)]);
-  $app.innerHTML = top(of.name_ar) + `<div class="hero" style="background:linear-gradient(135deg,${esc(of.color)},#073548)"><div class="ic">${oIco(of.slug,48)}</div><h1>${esc(of.name_ar)}</h1><p>${esc(of.description)}</p></div>
-  <div class="main"><h3 class="sec" style="margin-top:4px">الخدمات والأسعار</h3>
-  ${(s.data||[]).map(x=>`<div class="card row between"><div><b>${esc(x.name)}</b></div><span class="price">${esc(x.price_text)}</span></div>`).join('')}
+  const [s, f] = await Promise.all([sb.from('services').select('*').eq('office_slug', slug).eq('active', true).order('sort'), sb.from('offers').select('*').eq('office_slug', slug).is('agency_id', null).eq('active', true)]);
+  const acts = DIRECT_ACTIONS[slug] || [['تقديم طلب', `#/request/${slug}`]];
+  const price = slug === 'parcels' && of.ship_base != null ? `<div class="card"><div class="kv"><span>أجرة الإرسالية</span><b>${money(of.ship_base)}${of.ship_per_kg ? ' + ' + money(of.ship_per_kg) + ' لكل كجم' : ''}</b></div></div>`
+    : slug === 'transfers' && (of.transfer_pct != null || of.transfer_min != null) ? `<div class="card"><div class="kv"><span>رسوم التحويل</span><b>${of.transfer_pct ?? 0}%${of.transfer_min ? ' بحد أدنى ' + money(of.transfer_min) : ''}</b></div></div>` : '';
+  $app.innerHTML = top(of.name_ar) + `<div class="hero" style="background:linear-gradient(135deg,${esc(of.color)},#073548)"><div class="ic">${oIco(of.slug,48)}</div><h1>${esc(of.name_ar)}</h1><p>${esc(of.description || '')}</p></div>
+  <div class="main">${(s.data||[]).length ? '<h3 class="sec" style="margin-top:4px">الخدمات والأسعار</h3>' + s.data.map(x=>`<div class="card row between"><div><b>${esc(x.name)}</b></div><span class="price">${esc(x.price_text)}</span></div>`).join('') : ''}
+  ${price}
   ${(f.data||[]).length?'<h3 class="sec">العروض المتاحة</h3>'+f.data.map(x=>`<div class="card"><div class="row between"><b>${esc(x.title)}</b><span class="badge acc">${esc(x.price_text||x.badge||'عرض')}</span></div><div class="mut">${esc(x.description)}</div></div>`).join(''):''}
-  <div style="display:grid;gap:10px;margin-top:14px"><a class="btn" href="#/request/${slug}">تقديم طلب</a></div>
+  <div style="display:grid;gap:10px;margin-top:14px">${acts.map(x => `<a class="btn ${x[1].includes('track') ? 'ghost' : ''}" href="${x[1]}">${x[0]}</a>`).join('')}</div>
   ${of.phone || of.whatsapp ? `<h3 class="sec">التواصل</h3><div class="card">${of.phone ? `<div class="kv"><span>الهاتف</span><b dir="ltr"><a href="tel:${esc(of.phone)}">${esc(of.phone)}</a></b></div>` : ''}
   ${of.whatsapp ? `<div class="kv"><span>واتساب</span><b><a href="https://wa.me/${esc(of.whatsapp)}" target="_blank" rel="noopener">فتح المحادثة</a></b></div>` : ''}</div>` : ''}</div>` + nav('home');
 }
@@ -294,21 +304,29 @@ async function viewTrips(aid) {
 }
 
 const bookingDraft = {};
+/* مخطط الباص: صفوف 2+2 بينها ممر، باب بعد الصف السادس، وصف أخير من 5 مقاعد (مثال 51 مقعداً). يتكيّف مع أي عدد مقاعد تحدده الإدارة. */
+function busLayout(N) {
+  const back = N >= 12 ? 5 : 0, M = N - back, door = M >= 26, rows = []; let n = 1;
+  const fix = (r, lim) => r.map(c => typeof c === 'number' && c > lim ? null : c);
+  const cell = (b, post) => post ? [b, b + 1, 'g', b + 3, b + 2] : [b + 2, b + 3, 'g', b + 1, b];
+  const pre = door ? 6 : Math.ceil(M / 4);
+  for (let i = 0; i < pre; i++) { rows.push(fix(cell(n, false), M)); n += 4; }
+  if (door) { rows.push(['d', 'd', 'g', n + 1, n]); n += 2; while (n <= M) { rows.push(fix(cell(n, true), M)); n += 4; } }
+  return { rows, back: back ? [N - 2, N - 1, N, N - 3, N - 4] : null };
+}
 async function viewSeats(id) {
   loading();
   const [t, bs] = await Promise.all([sb.from('trips').select('*').eq('id', id).single(), sb.from('booking_seats').select('seat_no').eq('trip_id', id)]);
   const trip = t.data; if (!trip) return shell('<div class="empty">الرحلة غير موجودة</div>', 'home', 'المقاعد');
   const taken = new Set((bs.data||[]).map(x => x.seat_no)); let sel = [];
-  const rows = Math.ceil(trip.seats_total / 4);
-  let g = ''; let n = 1;
-  for (let r = 0; r < rows; r++) for (let c = 0; c < 5; c++) {
-    if (c === 2) { g += '<div></div>'; continue; }
-    if (n > trip.seats_total) { g += '<div></div>'; continue; }
-    g += `<button class="seat ${taken.has(n)?'booked':''}" data-n="${n}" ${taken.has(n)?'disabled':''}>${n}</button>`; n++;
-  }
+  const seatBtn = n => `<button class="seat ${taken.has(n)?'booked':''}" data-n="${n}" ${taken.has(n)?'disabled':''}>${n}</button>`;
+  const L = busLayout(trip.seats_total);
+  const cellHtml = c => c === 'g' || c == null ? '<div></div>' : c === 'd' ? '<div class="door">' + ico('door', 16) + 'الباب</div>' : seatBtn(c);
+  const main = L.rows.map(r => { let h = '', skip = false; r.forEach(c => { if (c === 'd') { if (!skip) { h += cellHtml('d'); skip = true; } } else h += cellHtml(c); }); return h; }).join('');
+  const g = main + '</div>' + (L.back ? `<div class="seats five" style="margin-top:8px">${L.back.map(cellHtml).join('')}` : '');
   shell(`<div class="card"><div class="route">${esc(trip.from_city)} <i>←</i> ${esc(trip.to_city)}</div><div class="mut">${dt(trip.depart_at)}</div></div>
   <div class="legend"><span><i style="background:#e8f5ee;border:2px solid #2E7D5B"></i>متاح</span><span><i style="background:#F5A623"></i>مختار</span><span><i style="background:#e3e7eb"></i>محجوز</span></div>
-  <div class="seatwrap"><div class="driver"><span class="row" style="gap:5px">${ico('door',16)}الباب</span><span class="row" style="gap:5px">السائق${ico('wheel',16)}</span></div><div class="seats">${g}</div></div>
+  <div class="seatwrap"><div class="driver"><span class="cab row" style="gap:5px">${ico('user',16)}المضيف</span><span class="cab row" style="gap:5px">${ico('wheel',16)}السائق</span></div><div class="seats">${g}</div></div>
   <div class="sum"><div class="row between"><span>المقاعد</span><b id="sl">—</b></div><div class="row between"><span>الإجمالي</span><b class="price" id="tot">${money(0)}</b></div></div>
   <div style="height:14px"></div><button class="btn" id="nx" disabled>متابعة</button>`, 'home', 'اختيار المقعد');
   $app.querySelector('.seats').onclick = e => {
@@ -343,7 +361,7 @@ async function viewBooking(id) {
   const [a, pay, pm, mine] = await Promise.all([
     getAgency(b.agency_id),
     sb.from('app_settings').select('value').eq('key', 'payment_info').maybeSingle(),
-    b.status === 'accepted' ? sb.from('payment_methods').select('*').eq('active', true).eq('agency_id', b.agency_id || '00000000-0000-0000-0000-000000000000').order('sort') : { data: [] },
+    b.status === 'accepted' ? payQuery(b.agency_id) : { data: [] },
     b.status === 'confirmed' ? myRating(b.agency_id) : 0]);
   const methods = payCards(pm.data || [], b.agency_id);
   const t = b.trips, ok = b.status === 'confirmed', live = b.status !== 'cancelled';
@@ -352,6 +370,7 @@ async function viewBooking(id) {
   shell(`${agencyLine(a)}
   ${live ? `<div class="card"><div class="tl h">${steps.map((x, i) => `<div class="st ${i < step || (ok && i === step) ? 'done' : i === step ? 'now' : ''}"><b>${x}</b></div>`).join('')}</div></div>` : ''}
   ${handlerCard(b, b.status === 'pending')}
+  ${live && t.lat && t.lng && b.status !== 'pending' ? mapBlock('أين الرحلة الآن', t.lat, t.lng, t.loc_updated_at) : ''}
   <div class="ticket"><div class="h"><div class="row between"><b>تذكرة سفر</b>${badge(b.status)}</div><div class="route" style="margin-top:8px">${esc(t.from_city)} <i>←</i> ${esc(t.to_city)}</div></div>
   <div class="b"><div class="kv"><span>المسافر</span><b>${esc(b.passenger_name)}</b></div><div class="kv"><span>الهاتف</span><b dir="ltr">${esc(b.passenger_phone)}</b></div>${b.passenger_whatsapp?`<div class="kv"><span>الواتساب</span><b dir="ltr">${esc(b.passenger_whatsapp)}</b></div>`:''}
   <div class="kv"><span>تاريخ ووقت السفر</span><b>${dt(t.depart_at)}</b></div><div class="kv"><span>المقاعد</span><b>${b.seats.join('، ')}</b></div><div class="kv"><span>الإجمالي</span><b class="price">${money(b.total)}</b></div></div>
@@ -384,14 +403,24 @@ async function viewBooking(id) {
   exp(document.getElementById('si'), 'png'); exp(document.getElementById('sp'), 'pdf');
 }
 
+/* وجهة الطلب: مكتب محدد، أو القسم نفسه (مباشر) إن لم يكن نظام المكاتب مفعّلاً لهذا القسم */
+async function target(slug, aid) {
+  if (aid) { const a = await getAgency(aid); return a && a.is_open ? { a, id: aid } : { closed: true }; }
+  const { data: of } = await sb.from('offices').select('*').eq('slug', slug).maybeSingle();
+  if (!of || of.use_agencies) return { redirect: '#/office/' + slug };
+  return { a: { name: of.name_ar, ship_base: of.ship_base, ship_per_kg: of.ship_per_kg, transfer_pct: of.transfer_pct, transfer_min: of.transfer_min, is_open: true }, id: null, direct: true };
+}
+const targetCard = T => T.direct ? '' : `<div class="card row">${logoBox(T.a, 40)}<b>${esc(T.a.name)}</b></div>`;
+const payQuery = aid => { const q = sb.from('payment_methods').select('*').eq('active', true).order('sort'); return aid ? q.eq('agency_id', aid) : q.is('agency_id', null); };
+
 /* ---------- الإرساليات ---------- */
 async function viewShipNew(aid) {
-  if (!need()) return; if (!aid) return go('#/office/parcels');
-  const a = await getAgency(aid);
-  if (!a || !a.is_open) return shell('<div class="note">هذا المكتب غير متاح حالياً.</div>', 'home', 'إرسالية جديدة');
-  const priced = a.ship_base != null;
+  if (!need()) return;
+  const T = await target('parcels', aid); if (T.redirect) return go(T.redirect);
+  if (T.closed) return shell('<div class="note">هذا المكتب غير متاح حالياً.</div>', 'home', 'إرسالية جديدة');
+  const a = T.a, priced = a.ship_base != null;
   const calc = w => priced ? Number(a.ship_base) + Number(a.ship_per_kg || 0) * w : 0;
-  shell(`<div class="card row">${logoBox(a, 40)}<b>${esc(a.name)}</b></div><div id="msg"></div><h3 class="sec" style="margin-top:0">المرسل</h3><label>الاسم</label><input id="sn" value="${esc(user.full_name||'')}"><label>الهاتف</label><input id="sp" type="tel" dir="ltr" value="${esc(user.phone||'')}"><label>مكان الإرسال</label><input id="sf" placeholder="المدينة / الحي">
+  shell(`${targetCard(T)}<div id="msg"></div><h3 class="sec" style="margin-top:0">المرسل</h3><label>الاسم</label><input id="sn" value="${esc(user.full_name||'')}"><label>الهاتف</label><input id="sp" type="tel" dir="ltr" value="${esc(user.phone||'')}"><label>مكان الإرسال</label><input id="sf" placeholder="المدينة / الحي">
   <h3 class="sec">المستلم</h3><label>الاسم</label><input id="rn"><label>الهاتف</label><input id="rp" type="tel" dir="ltr"><label>مكان الاستلام</label><input id="rt" placeholder="المدينة / الحي">
   <h3 class="sec">الإرسالية</h3><label>الوزن (كجم)</label><input id="wk" type="number" min="0.5" step="0.5" value="1" inputmode="decimal"><label>الوصف</label><input id="ds">
   <div class="sum">${priced ? `<div class="row between"><span>التكلفة التقديرية</span><b class="price" id="cost">${money(calc(1))}</b></div><div class="mut">${money(a.ship_base)}${a.ship_per_kg ? ' + ' + money(a.ship_per_kg) + ' لكل كجم' : ''}</div>` : '<div class="mut">يحدد المكتب التكلفة بعد استلام طلبك.</div>'}</div>
@@ -400,7 +429,7 @@ async function viewShipNew(aid) {
   document.getElementById('go').onclick = async e => {
     const w = +val('wk'); if (!val('sn') || !val('sp') || !val('sf') || !val('rn') || !val('rp') || !val('rt') || !(w > 0)) return toast('أكمل جميع الحقول المطلوبة');
     busy(e.target, true);
-    const { data, error } = await sb.from('shipments').insert({ sender_name: val('sn'), sender_phone: val('sp'), from_place: val('sf'), receiver_name: val('rn'), receiver_phone: val('rp'), to_place: val('rt'), weight_kg: w, description: val('ds'), agency_id: aid }).select().single();
+    const { data, error } = await sb.from('shipments').insert({ sender_name: val('sn'), sender_phone: val('sp'), from_place: val('sf'), receiver_name: val('rn'), receiver_phone: val('rp'), to_place: val('rt'), weight_kg: w, description: val('ds'), agency_id: T.id }).select().single();
     busy(e.target, false); if (error) return toast(errMsg(error)); toast('تم تسجيل الإرسالية'); go('#/ship/' + data.id);
   };
 }
@@ -411,7 +440,8 @@ function viewShipTrack() {
 }
 const SHIP_FLOW = ['received', 'in_transit', 'arrived', 'delivered'];
 const shipTimeline = (status, hist) => { const idx = SHIP_FLOW.indexOf(status); return `<div class="tl">${SHIP_FLOW.map((k, i) => `<div class="st ${i < idx || status==='delivered' && i===idx ? 'done' : i === idx ? 'now' : ''}"><b>${ST[k][0]}</b><small>${hist[k] ? dt(hist[k]) : 'بانتظار التحديث'}</small></div>`).join('')}</div>`; };
-const shipMap = sh => sh.lat && sh.lng ? `<h3 class="sec">الموقع الحالي</h3><iframe class="map" loading="lazy" src="https://www.openstreetmap.org/export/embed.html?bbox=${sh.lng-.05},${sh.lat-.03},${+sh.lng+.05},${+sh.lat+.03}&marker=${sh.lat},${sh.lng}"></iframe>` : '<div class="note">تظهر الخريطة هنا عند توفر موقع الإرسالية.</div>';
+const mapBlock = (title, lat, lng, when) => `<h3 class="sec">${title}</h3><div class="card" style="padding:8px"><iframe class="map" loading="lazy" src="https://www.openstreetmap.org/export/embed.html?bbox=${lng-.05},${lat-.03},${+lng+.05},${+lat+.03}&layer=mapnik&marker=${lat},${lng}"></iframe><div class="row between" style="padding:8px 4px 2px"><span class="mut" style="font-size:12.5px">${when ? 'آخر تحديث: ' + dt(when) : ''}</span><a class="btn sm ghost" href="https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=14/${lat}/${lng}" target="_blank" rel="noopener">فتح الخريطة</a></div></div>`;
+const shipMap = sh => sh.lat && sh.lng ? mapBlock('أين إرساليتك الآن', sh.lat, sh.lng, sh.updated_at) : '<div class="note">سيظهر موقع الإرسالية على الخريطة عندما يحدّثه المكتب.</div>';
 async function viewTrackResult(no) {
   if (!need()) return; loading();
   const { data: t, error } = await sb.rpc('track_shipment', { p_no: no });
@@ -437,7 +467,7 @@ async function viewShip(id) {
 /* ---------- العقارات ---------- */
 async function viewProps(aid) {
   loading();
-  let pq = sb.from('properties').select('*').eq('active', true).order('created_at', { ascending: false }); if (aid) pq = pq.eq('agency_id', aid);
+  let pq = sb.from('properties').select('*').eq('active', true).order('created_at', { ascending: false }); pq = aid ? pq.eq('agency_id', aid) : pq.is('agency_id', null);
   const { data } = await pq;
   let f = 'all';
   const draw = () => shell(`<div class="chips">${[['all','الكل'],['sale','بيع'],['rent','إيجار']].map(c=>`<button class="chip ${f===c[0]?'on':''}" data-f="${c[0]}">${c[1]}</button>`).join('')}</div>
@@ -463,14 +493,15 @@ async function viewProp(id) {
 
 /* ---------- التحويلات ---------- */
 async function viewTransfer(aid) {
-  if (!need()) return; if (!aid) return go('#/office/transfers');
-  const a = await getAgency(aid);
-  if (!a || !a.is_open) return shell('<div class="note">هذا المكتب غير متاح حالياً.</div>', 'home', 'تحويل مالي');
+  if (!need()) return;
+  const T = await target('transfers', aid); if (T.redirect) return go(T.redirect);
+  if (T.closed) return shell('<div class="note">هذا المكتب غير متاح حالياً.</div>', 'home', 'تحويل مالي');
+  const a = T.a;
   const feeOf = x => (a.transfer_pct == null && a.transfer_min == null) ? 0 : Math.max(Math.round(x * Number(a.transfer_pct || 0) / 100), Number(a.transfer_min || 0));
   const feeTxt = (a.transfer_pct == null && a.transfer_min == null) ? 'بدون رسوم' : `${a.transfer_pct ?? 0}%${a.transfer_min ? ' بحد أدنى ' + Number(a.transfer_min).toLocaleString('ar-EG') : ''}`;
   let kind = 'domestic';
   const CUR = { 'السودان': 'SDG', 'مصر': 'EGP', 'السعودية': 'SAR', 'الإمارات': 'AED', 'قطر': 'QAR', 'تركيا': 'TRY', 'أمريكا': 'USD' };
-  shell(`<div class="card row">${logoBox(a, 40)}<b>${esc(a.name)}</b></div><div class="tabs"><button id="k1" class="on">تحويل داخلي</button><button id="k2">تحويل خارجي</button></div>
+  shell(`${targetCard(T)}<div class="tabs"><button id="k1" class="on">تحويل داخلي</button><button id="k2">تحويل خارجي</button></div>
   <label>الدولة</label><select id="co">${Object.keys(CUR).map(c=>`<option>${c}</option>`).join('')}</select><label>العملة</label><input id="cu" value="SDG" readonly dir="ltr">
   <label>اسم المرسل</label><input id="sn" value="${esc(user.full_name||'')}"><label>اسم المستلم</label><input id="rn"><label>هاتف المستلم</label><input id="rp" type="tel" dir="ltr">
   <label>المبلغ</label><input id="am" type="number" min="1" inputmode="decimal"><label>ملاحظة</label><input id="nt">
@@ -484,7 +515,7 @@ async function viewTransfer(aid) {
   document.getElementById('go').onclick = async e => {
     const x = +val('am'); if (!val('sn') || !val('rn') || !val('rp') || !(x > 0)) return toast('أكمل الحقول المطلوبة');
     busy(e.target, true);
-    const { data, error } = await sb.from('transfers').insert({ kind, country: val('co'), currency: val('cu'), amount: x, sender_name: val('sn'), receiver_name: val('rn'), receiver_phone: val('rp'), note: val('nt'), agency_id: aid }).select().single();
+    const { data, error } = await sb.from('transfers').insert({ kind, country: val('co'), currency: val('cu'), amount: x, sender_name: val('sn'), receiver_name: val('rn'), receiver_phone: val('rp'), note: val('nt'), agency_id: T.id }).select().single();
     busy(e.target, false); if (error) return toast(errMsg(error)); toast('تم إرسال طلب التحويل'); go('#/transfer/' + data.id);
   };
 }
@@ -493,7 +524,7 @@ async function viewTransferDetail(id) {
   const { data: t } = await sb.from('transfers').select('*').eq('id', id).single();
   if (!t) return shell('<div class="empty">غير موجود</div>', 'orders', 'التحويل');
   const [a, pm, mine] = await Promise.all([getAgency(t.agency_id),
-    t.status === 'accepted' ? sb.from('payment_methods').select('*').eq('active', true).eq('agency_id', t.agency_id || '00000000-0000-0000-0000-000000000000').order('sort') : { data: [] },
+    t.status === 'accepted' ? payQuery(t.agency_id) : { data: [] },
     t.status === 'completed' ? myRating(t.agency_id) : 0]);
   const flow = ['pending', 'accepted', 'payment_review', 'processing', 'completed'], idx = Math.max(0, flow.indexOf(t.status)), dead = ['rejected', 'cancelled'].includes(t.status);
   const lbl = { pending: 'أُرسل الطلب', accepted: 'قبول المكتب', payment_review: 'الدفع', processing: 'قيد التنفيذ', completed: 'تم التحويل' };
@@ -523,10 +554,10 @@ async function viewTransferDetail(id) {
 
 /* ---------- الموافقات الأمنية ---------- */
 async function viewSecurityNew(aid) {
-  if (!need()) return; if (!aid) return go('#/office/security');
-  const a = await getAgency(aid);
-  if (!a || !a.is_open) return shell('<div class="note">هذا المكتب غير متاح حالياً.</div>', 'home', 'طلب موافقة أمنية');
-  shell(`<div class="card row">${logoBox(a, 40)}<b>${esc(a.name)}</b></div><label>نوع الطلب / الخدمة</label><input id="sv" placeholder="مثال: تصريح سفر"><label>الاسم الكامل</label><input id="fn" value="${esc(user.full_name||'')}"><label>الهاتف</label><input id="ph" type="tel" dir="ltr" value="${esc(user.phone||'')}">
+  if (!need()) return;
+  const T = await target('security', aid); if (T.redirect) return go(T.redirect);
+  if (T.closed) return shell('<div class="note">هذا المكتب غير متاح حالياً.</div>', 'home', 'طلب موافقة أمنية');
+  shell(`${targetCard(T)}<label>نوع الطلب / الخدمة</label><input id="sv" placeholder="مثال: تصريح سفر"><label>الاسم الكامل</label><input id="fn" value="${esc(user.full_name||'')}"><label>الهاتف</label><input id="ph" type="tel" dir="ltr" value="${esc(user.phone||'')}">
   <label>رقم الهوية / الجواز</label><input id="idn" dir="ltr"><label>ملاحظات</label><textarea id="nt"></textarea><label>المستندات (صور أو PDF، حتى 5 ملفات)</label><input type="file" id="fl" multiple accept="image/*,application/pdf">
   <div style="height:16px"></div><button class="btn" id="go">إرسال الطلب</button>`, 'home', 'طلب موافقة أمنية');
   document.getElementById('go').onclick = async e => {
@@ -534,7 +565,7 @@ async function viewSecurityNew(aid) {
     const files = [...document.getElementById('fl').files].slice(0, 5); if (files.some(f => f.size > 5 * 1024 * 1024)) return toast('الحد الأقصى لكل ملف 5 ميغابايت');
     busy(e.target, true); const paths = [];
     for (const f of files) { const p = `${user.id}/${Date.now()}-${paths.length}.${(f.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')}`; const u = await sb.storage.from('documents').upload(p, f, { contentType: f.type }); if (u.error) { busy(e.target, false); return toast(u.error.message); } paths.push(p); }
-    const { data, error } = await sb.from('security_requests').insert({ service: val('sv'), full_name: val('fn'), phone: val('ph'), id_no: val('idn') || null, notes: val('nt'), docs: paths, agency_id: aid }).select().single();
+    const { data, error } = await sb.from('security_requests').insert({ service: val('sv'), full_name: val('fn'), phone: val('ph'), id_no: val('idn') || null, notes: val('nt'), docs: paths, agency_id: T.id }).select().single();
     busy(e.target, false); if (error) return toast(errMsg(error)); toast('تم إرسال الطلب'); go('#/security/' + data.id);
   };
 }
@@ -569,7 +600,7 @@ async function viewNotifs() {
   if (!need()) return; loading();
   const { data } = await sb.from('notifications').select('*').order('created_at', { ascending: false }).limit(50);
   shell((data||[]).map(n => `<div class="card notif ${n.read?'':'unread'}"><b>${esc(n.title)}</b><div class="mut">${esc(n.body)}</div><div class="mut" style="font-size:12px;margin-top:4px">${dt(n.created_at)}</div></div>`).join('') || emptyBox('bell','لا توجد إشعارات'), 'notifs', 'الإشعارات', false);
-  if ((data||[]).some(n => !n.read)) { await sb.from('notifications').update({ read: true }).eq('read', false); unread = 0; }
+  if ((data||[]).some(n => !n.read)) { await sb.from('notifications').update({ read: true }).eq('read', false); unread = 0; setBadge(); }
 }
 async function viewMe() {
   if (!need()) return;
@@ -604,6 +635,20 @@ async function loadUser(session) {
   const [p, n] = await Promise.all([sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle(), sb.from('notifications').select('id', { count: 'exact', head: true }).eq('read', false)]);
   user = { id: session.user.id, email: session.user.email, ...(p.data || {}) }; unread = n.count || 0;
 }
+const setBadge = () => { const a = document.querySelector('.tabbar a[href="#/notifs"], nav a[href="#/notifs"]') || document.querySelector('a[href="#/notifs"]'); if (!a) return; let b = a.querySelector('.bd'); if (unread) { if (!b) { b = document.createElement('span'); b.className = 'bd'; a.appendChild(b); } b.textContent = unread; } else if (b) b.remove(); };
+let notifTimer = null, lastNotifId = null;
+async function pollNotifs(first) {
+  if (!user || !sb) return;
+  const { data } = await sb.from('notifications').select('id,title,read').eq('read', false).order('created_at', { ascending: false }).limit(50);
+  const rows = data || []; unread = rows.length; setBadge();
+  if (!first && rows.length && rows[0].id !== lastNotifId) toast(rows[0].title);
+  lastNotifId = rows[0]?.id || lastNotifId;
+}
+function startNotifPolling() {
+  clearInterval(notifTimer); pollNotifs(true);
+  notifTimer = setInterval(() => { if (!document.hidden) pollNotifs(false); }, 30000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) pollNotifs(false); });
+}
 let pushOn = false;
 async function registerPush() {
   const P = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.PushNotifications;
@@ -618,13 +663,13 @@ async function registerPush() {
 }
 async function boot() {
   if (sb) {
-    const { data } = await sb.auth.getSession(); await loadUser(data.session); registerPush();
+    const { data } = await sb.auth.getSession(); await loadUser(data.session); registerPush(); if (user) startNotifPolling();
     sb.auth.onAuthStateChange((ev, s) => {
       if (ev === 'INITIAL_SESSION' || recovering) return;
       /* عند العودة من معرض الصور يُعيد Supabase إرسال SIGNED_IN لنفس المستخدم؛ لا نُعيد رسم الصفحة حتى لا يضيع الملف المختار */
       const same = s && user && s.user.id === user.id;
       if (ev === 'TOKEN_REFRESHED' || (same && (ev === 'SIGNED_IN' || ev === 'USER_UPDATED'))) return;
-      setTimeout(async () => { await loadUser(s); registerPush(); if (ev === 'SIGNED_OUT') { lsDel('home_v2'); go('#/'); } route(); }, 0);
+      setTimeout(async () => { await loadUser(s); registerPush(); if (user && !notifTimer) startNotifPolling(); if (ev === 'SIGNED_OUT') { lsDel('home_v2'); go('#/'); } route(); }, 0);
     });
   }
   window.addEventListener('hashchange', route);
