@@ -10,7 +10,7 @@ const dt = d => new Date(d).toLocaleString('ar-EG', {dateStyle:'medium', timeSty
 const ST = {pending:['بانتظار تأكيد المكتب','warn'],accepted:['تم القبول — بانتظار الدفع','info'],payment_review:['مراجعة الدفع','info'],confirmed:['مؤكد','ok'],cancelled:['ملغي','bad'],received:['تم الاستلام','info'],in_transit:['في الطريق','warn'],arrived:['وصلت للوجهة','info'],delivered:['تم التسليم','ok'],processing:['قيد التنفيذ','warn'],completed:['مكتمل','ok'],approved:['تمت الموافقة','ok'],rejected:['مرفوض','bad']};
 const badge = s => `<span class="badge ${(ST[s]||[s,''])[1]}">${(ST[s]||[s])[0]}</span>`;
 const toast = m => { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('show'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 2800); };
-const errMsg = e => ({seat_taken:'أحد المقاعد حُجز للتو، اختر مقعداً آخر.',trip_unavailable:'الرحلة غير متاحة.',bad_seats:'اختر من 1 إلى 6 مقاعد.',not_authenticated:'سجّل الدخول أولاً.',agency_closed:'هذا المكتب مغلق حالياً، جرّب مكتباً آخر.',already_taken:'تم استلام الطلب من مشرف آخر.',not_eligible:'يمكنك التقييم بعد إتمام خدمة مع هذا المكتب.'}[e?.message] || e?.message || 'حدث خطأ');
+const errMsg = e => ({seat_taken:'أحد المقاعد حُجز للتو، اختر مقعداً آخر.',trip_unavailable:'الرحلة غير متاحة.',bad_seats:'اختر من 1 إلى 6 مقاعد.',not_authenticated:'سجّل الدخول أولاً.',agency_closed:'هذا المكتب مغلق حالياً، جرّب مكتباً آخر.',already_taken:'تم استلام الطلب من مشرف آخر.',bad_transition:'لا يمكن تنفيذ هذا الإجراء في الحالة الحالية.',forbidden:'غير مسموح.',bad_amount:'مبلغ غير صحيح.',not_eligible:'يمكنك التقييم بعد إتمام خدمة مع هذا المكتب.'}[e?.message] || e?.message || 'حدث خطأ');
 const go = h => { location.hash = h; };
 const val = id => (document.getElementById(id)?.value || '').trim();
 const busy = (b, on) => { b.disabled = on; };
@@ -44,6 +44,28 @@ const IC = {
 const ico = (n, size = 24, sw = 1.8) => `<svg class="svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n] || IC.building}</svg>`;
 const OFFICE_IC = { travel:'bus', parcels:'package', realestate:'home', transfers:'banknote', security:'shield', tourism:'compass', gov:'landmark', shipping:'truck', hotels:'bed', market:'bag', cars:'wrench', ads:'megaphone' };
 const oIco = (slug, size) => ico(OFFICE_IC[slug] || 'building', size);
+const agencyLine = a => a ? `<a class="card row" href="#/agency/${a.id}">${logoBox(a, 44)}<div class="grow"><b>${esc(a.name)}</b><div class="mut" style="font-size:13px">المكتب المسؤول عن طلبك</div></div></a>` : '';
+const handlerCard = (r, pending) => r.handler_name ? `<div class="card"><div class="mut" style="font-size:13px">المشرف المتابع لطلبك</div><div class="row between" style="margin-top:4px"><b>${esc(r.handler_name)}</b><div class="row" style="gap:8px">${r.handler_phone ? `<a class="btn sm ghost" href="tel:${esc(r.handler_phone)}">اتصال</a><a class="btn sm ghost" href="https://wa.me/${esc(String(r.handler_phone).replace(/\D/g, ''))}" target="_blank" rel="noopener">واتساب</a>` : ''}</div></div></div>` : (pending ? '<div class="note">تم إرسال طلبك إلى مشرفي المكتب، وسيستلمه أحدهم قريباً.</div>' : '');
+const rateCard = mine => `<h3 class="sec">قيّم المكتب</h3><div class="card"><div class="rate" id="rate">${[1,2,3,4,5].map(i => `<button data-s="${i}" class="${mine && i <= mine ? 'on' : ''}">★</button>`).join('')}</div><textarea id="rc" placeholder="تعليق (اختياري)" style="margin-top:8px"></textarea><div style="height:8px"></div><button class="btn sm" id="rs">${mine ? 'تحديث التقييم' : 'إرسال التقييم'}</button></div>`;
+const wireRate = (aid, mine) => {
+  const rate = document.getElementById('rate'); if (!rate) return; let st = mine || 0;
+  rate.onclick = e => { const x = e.target.closest('button'); if (!x) return; st = +x.dataset.s; rate.querySelectorAll('button').forEach(y => y.classList.toggle('on', +y.dataset.s <= st)); };
+  document.getElementById('rs').onclick = async e => {
+    if (!st) return toast('اختر عدد النجوم');
+    busy(e.target, true); const r = await sb.rpc('rate_agency', { p_agency: aid, p_stars: st, p_comment: val('rc') || null }); busy(e.target, false);
+    if (r.error) return toast(errMsg(r.error)); toast('شكراً لتقييمك');
+  };
+};
+const myRating = async (aid) => aid ? (await sb.from('agency_ratings').select('stars').eq('agency_id', aid).eq('user_id', user.id).maybeSingle()).data?.stars || 0 : 0;
+const getAgency = async id => id ? (await sb.from('agencies').select('*').eq('id', id).maybeSingle()).data : null;
+const copyBtns = () => $app.querySelectorAll('[data-copy]').forEach(btn => btn.onclick = async () => {
+  const t = btn.dataset.copy;
+  try { await navigator.clipboard.writeText(t); }
+  catch (_) { const a = document.createElement('textarea'); a.value = t; a.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); } catch (__) {} a.remove(); }
+  toast('تم نسخ رقم الحساب');
+});
+const payCards = (all, aid) => all.filter(m => m.agency_id === aid).map(m => `<div class="card pay"><div class="row between"><b>${esc(m.name)}</b><button class="btn sm ghost" data-copy="${esc(m.account_no)}">نسخ الرقم</button></div>
+  <div class="acc" dir="ltr">${esc(m.account_no)}</div>${m.holder ? `<div class="mut">باسم: ${esc(m.holder)}</div>` : ''}${m.note ? `<div class="mut" style="font-size:13px;margin-top:4px">${esc(m.note)}</div>` : ''}</div>`).join('');
 const emptyBox = (n, t) => `<div class="empty"><div class="big">${ico(n, 46, 1.4)}</div>${t}</div>`;
 
 /* ---------- القوالب العامة ---------- */
@@ -157,8 +179,8 @@ async function viewHome() {
     <div class="search"><input id="q" placeholder="ابحث عن خدمة أو مكتب…" autocomplete="off"></div>
     <div class="main"><div class="banners">${d.b.map(x=>`<a class="banner" href="${esc(x.link||'#/')}" style="background:linear-gradient(135deg,${esc(x.color)},#073548)"><b>${esc(x.title)}</b><span>${esc(x.subtitle)}</span></a>`).join('')}</div>
     <h3 class="sec">المكاتب</h3><div class="grid" id="grid"></div>
-    <h3 class="sec">العروض والخدمات الأكثر طلباً</h3>
-    ${d.f.map(x=>`<a class="card row" href="#/office/${esc(x.office_slug)}"><div class="grow"><b>${esc(x.title)}</b><div class="mut">${esc(x.description)}</div></div>${x.badge?`<span class="badge acc">${esc(x.badge)}</span>`:''}</a>`).join('') || '<div class="empty">لا توجد عروض حالياً</div>'}</div>` + nav('home');
+    ${d.f.length ? `<h3 class="sec">عروض المكاتب</h3>
+    ${d.f.map(x=>`<a class="card row" href="#/agency/${esc(x.agency_id)}"><div class="grow"><b>${esc(x.title)}</b><div class="mut">${esc(x.agencies?.name||'')}${x.description?' · '+esc(x.description):''}</div></div>${x.price_text||x.badge?`<span class="badge acc">${esc(x.price_text||x.badge)}</span>`:''}</a>`).join('')}` : ''}</div>` + nav('home');
     const draw = list => document.getElementById('grid').innerHTML = list.map(x =>
       `<a class="tile" href="#/office/${esc(x.slug)}"><div class="ic" style="background:${esc(x.color)}1A;color:${esc(x.color)}">${oIco(x.slug,28)}</div><span>${esc(x.name_ar)}</span></a>`).join('') || '<div class="empty" style="grid-column:1/-1">لا نتائج</div>';
     draw(offices);
@@ -170,15 +192,15 @@ async function viewHome() {
       draw(offices.filter(x => x.name_ar.includes(q) || slugs.has(x.slug)));
     };
   };
-  const cached = lsGet('home_v1');
+  const cached = lsGet('home_v2');
   if (cached) paint(cached); else loading();
   const [o, b, f] = await Promise.all([
     sb.from('offices').select('*').eq('active', true).order('sort'),
     sb.from('banners').select('*').eq('active', true).order('sort'),
-    sb.from('offers').select('*').eq('active', true).order('popular', { ascending: false }).limit(6)]);
+    sb.from('offers').select('*, agencies(name,is_open)').eq('active', true).not('agency_id', 'is', null).order('created_at', { ascending: false }).limit(8)]);
   if (o.error || b.error || f.error) { if (!cached) shell('<div class="empty">تعذّر تحميل البيانات، تحقق من الاتصال بالإنترنت ثم أعد المحاولة.</div>', 'home', 'المحطة', false); return; }
   const d = { o: o.data || [], b: b.data || [], f: f.data || [] };
-  lsSet('home_v1', d);
+  lsSet('home_v2', d);
   const q = document.getElementById('q');
   if (onHome() && (!cached || (JSON.stringify(cached) !== JSON.stringify(d) && !(q && q.value)))) paint(d);
 }
@@ -208,8 +230,8 @@ async function viewOfficeLegacy(of) {
   ${(s.data||[]).map(x=>`<div class="card row between"><div><b>${esc(x.name)}</b></div><span class="price">${esc(x.price_text)}</span></div>`).join('')}
   ${(f.data||[]).length?'<h3 class="sec">العروض المتاحة</h3>'+f.data.map(x=>`<div class="card"><div class="row between"><b>${esc(x.title)}</b><span class="badge acc">${esc(x.price_text||x.badge||'عرض')}</span></div><div class="mut">${esc(x.description)}</div></div>`).join(''):''}
   <div style="display:grid;gap:10px;margin-top:14px"><a class="btn" href="#/request/${slug}">تقديم طلب</a></div>
-  <h3 class="sec">التواصل</h3><div class="card"><div class="kv"><span>الهاتف</span><b dir="ltr"><a href="tel:${esc(of.phone)}">${esc(of.phone)}</a></b></div>
-  <div class="kv"><span>واتساب</span><b><a href="https://wa.me/${esc(of.whatsapp)}" target="_blank" rel="noopener">فتح المحادثة</a></b></div></div></div>` + nav('home');
+  ${of.phone || of.whatsapp ? `<h3 class="sec">التواصل</h3><div class="card">${of.phone ? `<div class="kv"><span>الهاتف</span><b dir="ltr"><a href="tel:${esc(of.phone)}">${esc(of.phone)}</a></b></div>` : ''}
+  ${of.whatsapp ? `<div class="kv"><span>واتساب</span><b><a href="https://wa.me/${esc(of.whatsapp)}" target="_blank" rel="noopener">فتح المحادثة</a></b></div>` : ''}</div>` : ''}</div>` + nav('home');
 }
 
 /* ---------- صفحة المكتب (الوكالة) ---------- */
@@ -318,35 +340,28 @@ async function viewBooking(id) {
   if (!need()) return; loading();
   const { data: b } = await sb.from('bookings').select('*, trips(*)').eq('id', id).single();
   if (!b) return shell('<div class="empty">الحجز غير موجود</div>', 'orders', 'التذكرة');
-  const [ag, pay, pm, rt] = await Promise.all([
-    b.agency_id ? sb.from('agencies').select('id,name,phone,whatsapp').eq('id', b.agency_id).maybeSingle() : { data: null },
+  const [a, pay, pm, mine] = await Promise.all([
+    getAgency(b.agency_id),
     sb.from('app_settings').select('value').eq('key', 'payment_info').maybeSingle(),
-    b.status === 'accepted' ? sb.from('payment_methods').select('*').eq('active', true).order('sort') : { data: [] },
-    b.status === 'confirmed' && b.agency_id ? sb.from('agency_ratings').select('stars').eq('agency_id', b.agency_id).eq('user_id', user.id).maybeSingle() : { data: null }]);
-  const all = pm.data || [], own = all.filter(m => m.agency_id && m.agency_id === b.agency_id);
-  const methods = (own.length ? own : all.filter(m => !m.agency_id)).map(m => `<div class="card pay"><div class="row between"><b>${esc(m.name)}</b><button class="btn sm ghost" data-copy="${esc(m.account_no)}">نسخ الرقم</button></div>
-    <div class="acc" dir="ltr">${esc(m.account_no)}</div>${m.holder ? `<div class="mut">باسم: ${esc(m.holder)}</div>` : ''}${m.note ? `<div class="mut" style="font-size:13px;margin-top:4px">${esc(m.note)}</div>` : ''}</div>`).join('');
-  const t = b.trips, a = ag.data, ok = b.status === 'confirmed', live = b.status !== 'cancelled';
+    b.status === 'accepted' ? sb.from('payment_methods').select('*').eq('active', true).eq('agency_id', b.agency_id || '00000000-0000-0000-0000-000000000000').order('sort') : { data: [] },
+    b.status === 'confirmed' ? myRating(b.agency_id) : 0]);
+  const methods = payCards(pm.data || [], b.agency_id);
+  const t = b.trips, ok = b.status === 'confirmed', live = b.status !== 'cancelled';
   const step = { pending: 0, accepted: 1, payment_review: 2, confirmed: 3 }[b.status] ?? -1;
   const steps = ['أُرسل الطلب', 'قبول المكتب', 'الدفع', 'إصدار التذكرة'];
-  const hp = b.handler_phone;
-  shell(`${a ? `<a class="card row" href="#/agency/${a.id}">${logoBox(a, 44)}<div class="grow"><b>${esc(a.name)}</b><div class="mut" style="font-size:13px">المكتب المسؤول عن حجزك</div></div></a>` : ''}
+  shell(`${agencyLine(a)}
   ${live ? `<div class="card"><div class="tl h">${steps.map((x, i) => `<div class="st ${i < step || (ok && i === step) ? 'done' : i === step ? 'now' : ''}"><b>${x}</b></div>`).join('')}</div></div>` : ''}
-  ${b.handler_name ? `<div class="card"><div class="mut" style="font-size:13px">المشرف المتابع لطلبك</div><div class="row between" style="margin-top:4px"><b>${esc(b.handler_name)}</b><div class="row" style="gap:8px">${hp ? `<a class="btn sm ghost" href="tel:${esc(hp)}">اتصال</a><a class="btn sm ghost" href="https://wa.me/${esc(String(hp).replace(/\D/g, ''))}" target="_blank" rel="noopener">واتساب</a>` : ''}</div></div></div>` : (b.status === 'pending' ? '<div class="note">تم إرسال طلبك إلى مشرفي المكتب، وسيؤكده أحدهم قريباً.</div>' : '')}
+  ${handlerCard(b, b.status === 'pending')}
   <div class="ticket"><div class="h"><div class="row between"><b>تذكرة سفر</b>${badge(b.status)}</div><div class="route" style="margin-top:8px">${esc(t.from_city)} <i>←</i> ${esc(t.to_city)}</div></div>
   <div class="b"><div class="kv"><span>المسافر</span><b>${esc(b.passenger_name)}</b></div><div class="kv"><span>الهاتف</span><b dir="ltr">${esc(b.passenger_phone)}</b></div>${b.passenger_whatsapp?`<div class="kv"><span>الواتساب</span><b dir="ltr">${esc(b.passenger_whatsapp)}</b></div>`:''}
   <div class="kv"><span>تاريخ ووقت السفر</span><b>${dt(t.depart_at)}</b></div><div class="kv"><span>المقاعد</span><b>${b.seats.join('، ')}</b></div><div class="kv"><span>الإجمالي</span><b class="price">${money(b.total)}</b></div></div>
   <div class="qr">${ok ? makeQR('MAHATTA|' + b.ref_no, 190) : `<div class="mut" style="padding:30px 0">${live ? 'يظهر الباركود بعد أن يُصدر المشرف التذكرة' : 'التذكرة ملغاة'}</div>`}<div class="refno" dir="ltr">${esc(b.ref_no)}</div><div class="mut" style="font-size:12px">${ok ? 'تذكرة مؤكدة — أبرز الباركود عند الصعود' : ''}</div></div></div>
-  ${b.status==='accepted'?`<h3 class="sec">طريقة الدفع</h3><div class="note">قبل المكتب طلبك. المبلغ المطلوب تحويله: <b>${money(b.total)}</b>${pay.data?.value ? '<br>' + esc(pay.data.value) : ''}</div>${methods || '<div class="note">تواصل مع المشرف للحصول على وسيلة الدفع.</div>'}<h3 class="sec">إثبات الدفع</h3><label style="margin-top:0">صورة إشعار الدفع</label><input type="file" id="fl" accept="image/*,application/pdf"><div style="height:12px"></div><button class="btn acc" id="up">رفع إثبات الدفع</button>`
+  ${ok ? '<div class="row" style="gap:10px;margin-top:12px"><button class="btn grow" id="si">حفظ كصورة</button><button class="btn ghost grow" id="sp">حفظ PDF</button></div>' : ''}
+  ${b.status==='accepted'?`<h3 class="sec">طريقة الدفع</h3><div class="note">قبل المكتب طلبك. المبلغ المطلوب تحويله: <b>${money(b.total)}</b>${pay.data?.value ? '<br>' + esc(pay.data.value) : ''}</div>${methods || '<div class="note">لم يضف المكتب وسيلة دفع بعد. تواصل مع المشرف لمعرفة طريقة الدفع.</div>'}<h3 class="sec">إثبات الدفع</h3><label style="margin-top:0">صورة إشعار الدفع</label><input type="file" id="fl" accept="image/*,application/pdf"><div style="height:12px"></div><button class="btn acc" id="up">رفع إثبات الدفع</button>`
   : b.status==='payment_review'?'<div class="note">تم استلام إثبات الدفع، والمشرف يراجعه ثم يُصدر تذكرتك.</div>':''}
   ${['pending','accepted','payment_review'].includes(b.status)?'<div style="height:10px"></div><button class="btn ghost" id="cn">إلغاء الحجز</button>':''}
-  ${ok && a ? `<h3 class="sec">قيّم المكتب</h3><div class="card"><div class="rate" id="rate">${[1,2,3,4,5].map(i => `<button data-s="${i}" class="${rt.data && i <= rt.data.stars ? 'on' : ''}">★</button>`).join('')}</div><textarea id="rc" placeholder="تعليق (اختياري)" style="margin-top:8px"></textarea><div style="height:8px"></div><button class="btn sm" id="rs">${rt.data ? 'تحديث التقييم' : 'إرسال التقييم'}</button></div>` : ''}`, 'orders', 'التذكرة');
-  $app.querySelectorAll('[data-copy]').forEach(btn => btn.onclick = async () => {
-    const t = btn.dataset.copy;
-    try { await navigator.clipboard.writeText(t); }
-    catch (_) { const a = document.createElement('textarea'); a.value = t; a.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); } catch (__) {} a.remove(); }
-    toast('تم نسخ رقم الحساب');
-  });
+  ${ok && a ? rateCard(mine) : ''}`, 'orders', 'التذكرة');
+  copyBtns(); if (ok && a) wireRate(a.id, mine);
   const up = document.getElementById('up');
   if (up) up.onclick = async () => {
     const f = document.getElementById('fl').files[0]; if (!f) return toast('اختر ملفاً أولاً'); if (f.size > 5 * 1024 * 1024) return toast('الحجم الأقصى 5 ميغابايت');
@@ -360,28 +375,28 @@ async function viewBooking(id) {
   };
   const cn = document.getElementById('cn');
   if (cn) cn.onclick = async () => { if (!confirm('إلغاء هذا الحجز؟')) return; const r = await sb.rpc('cancel_booking', { p_booking: b.id }); if (r.error) return toast(errMsg(r.error)); toast('تم الإلغاء'); viewBooking(id); };
-  const rate = document.getElementById('rate');
-  if (rate) {
-    let st = rt.data?.stars || 0;
-    rate.onclick = e => { const x = e.target.closest('button'); if (!x) return; st = +x.dataset.s; rate.querySelectorAll('button').forEach(y => y.classList.toggle('on', +y.dataset.s <= st)); };
-    document.getElementById('rs').onclick = async e => {
-      if (!st) return toast('اختر عدد النجوم');
-      busy(e.target, true); const r = await sb.rpc('rate_agency', { p_agency: b.agency_id, p_stars: st, p_comment: val('rc') || null }); busy(e.target, false);
-      if (r.error) return toast(errMsg(r.error)); toast('شكراً لتقييمك');
-    };
-  }
+  const tdata = () => ({ title: 'تذكرة سفر', agency: a?.name || '', route: `${t.from_city} ← ${t.to_city}`, rows: [['المسافر', b.passenger_name], ['الهاتف', b.passenger_phone], ['تاريخ ووقت السفر', dt(t.depart_at)], ['المقاعد', b.seats.join('، ')], ['الإجمالي', money(b.total)]], qr: makeQR('MAHATTA|' + b.ref_no, 300), ref: b.ref_no, foot: 'أبرز الباركود عند الصعود' });
+  const exp = (btn, kind) => { if (btn) btn.onclick = async () => {
+    busy(btn, true);
+    try { const d = tdata(), blob = kind === 'png' ? await TicketExport.png(d) : await TicketExport.pdf(d); const r = await TicketExport.save(blob, `ticket-${b.ref_no}.${kind}`, 'تذكرة ' + b.ref_no); if (r === 'downloaded') toast('تم تنزيل الملف'); }
+    catch (e) { console.error(e); toast('تعذّر حفظ التذكرة، حاول مرة أخرى'); }
+    busy(btn, false); }; };
+  exp(document.getElementById('si'), 'png'); exp(document.getElementById('sp'), 'pdf');
 }
 
 /* ---------- الإرساليات ---------- */
-function viewShipNew(aid) {
+async function viewShipNew(aid) {
   if (!need()) return; if (!aid) return go('#/office/parcels');
-  shell(`<div id="msg"></div><h3 class="sec" style="margin-top:0">المرسل</h3><label>الاسم</label><input id="sn" value="${esc(user.full_name||'')}"><label>الهاتف</label><input id="sp" type="tel" dir="ltr" value="${esc(user.phone||'')}"><label>مكان الإرسال</label><input id="sf" placeholder="المدينة / الحي">
+  const a = await getAgency(aid);
+  if (!a || !a.is_open) return shell('<div class="note">هذا المكتب غير متاح حالياً.</div>', 'home', 'إرسالية جديدة');
+  const priced = a.ship_base != null;
+  const calc = w => priced ? Number(a.ship_base) + Number(a.ship_per_kg || 0) * w : 0;
+  shell(`<div class="card row">${logoBox(a, 40)}<b>${esc(a.name)}</b></div><div id="msg"></div><h3 class="sec" style="margin-top:0">المرسل</h3><label>الاسم</label><input id="sn" value="${esc(user.full_name||'')}"><label>الهاتف</label><input id="sp" type="tel" dir="ltr" value="${esc(user.phone||'')}"><label>مكان الإرسال</label><input id="sf" placeholder="المدينة / الحي">
   <h3 class="sec">المستلم</h3><label>الاسم</label><input id="rn"><label>الهاتف</label><input id="rp" type="tel" dir="ltr"><label>مكان الاستلام</label><input id="rt" placeholder="المدينة / الحي">
   <h3 class="sec">الإرسالية</h3><label>الوزن (كجم)</label><input id="wk" type="number" min="0.5" step="0.5" value="1" inputmode="decimal"><label>الوصف</label><input id="ds">
-  <div class="sum"><div class="row between"><span>التكلفة التقديرية</span><b class="price" id="cost">${money(4500)}</b></div><div class="mut">3,000 ج.س + 1,500 ج.س لكل كجم</div></div>
+  <div class="sum">${priced ? `<div class="row between"><span>التكلفة التقديرية</span><b class="price" id="cost">${money(calc(1))}</b></div><div class="mut">${money(a.ship_base)}${a.ship_per_kg ? ' + ' + money(a.ship_per_kg) + ' لكل كجم' : ''}</div>` : '<div class="mut">يحدد المكتب التكلفة بعد استلام طلبك.</div>'}</div>
   <div style="height:14px"></div><button class="btn" id="go">تسجيل الإرسالية</button>`, 'home', 'إرسالية جديدة');
-  const upd = () => document.getElementById('cost').textContent = money(3000 + 1500 * (+val('wk') || 0));
-  document.getElementById('wk').oninput = upd;
+  if (priced) document.getElementById('wk').oninput = () => document.getElementById('cost').textContent = money(calc(+val('wk') || 0));
   document.getElementById('go').onclick = async e => {
     const w = +val('wk'); if (!val('sn') || !val('sp') || !val('sf') || !val('rn') || !val('rp') || !val('rt') || !(w > 0)) return toast('أكمل جميع الحقول المطلوبة');
     busy(e.target, true);
@@ -391,22 +406,32 @@ function viewShipNew(aid) {
 }
 function viewShipTrack() {
   if (!need()) return;
-  shell(`<div class="note">أدخل رقم التتبع الذي يبدأ بـ TRK لعرض حالة إرسالياتك.</div><label>رقم التتبع</label><input id="tn" dir="ltr" placeholder="TRK-XXXXXXX"><div style="height:14px"></div><button class="btn" id="go">بحث</button>`, 'home', 'تتبع إرسالية');
-  document.getElementById('go').onclick = async () => {
-    const { data } = await sb.from('shipments').select('id').eq('tracking_no', val('tn').toUpperCase()).maybeSingle();
-    if (!data) return toast('لم يتم العثور على إرسالية بهذا الرقم'); go('#/ship/' + data.id);
-  };
+  shell(`<div class="note">أدخل رقم التتبع الذي يبدأ بـ TRK لعرض حالة أي إرسالية، سواء كنت المرسل أو المستلم.</div><label>رقم التتبع</label><input id="tn" dir="ltr" placeholder="TRK-XXXXXXX"><div style="height:14px"></div><button class="btn" id="go">بحث</button>`, 'home', 'تتبع إرسالية');
+  document.getElementById('go').onclick = () => { const n = val('tn').toUpperCase(); if (!n) return toast('أدخل رقم التتبع'); go('#/track/' + encodeURIComponent(n)); };
+}
+const SHIP_FLOW = ['received', 'in_transit', 'arrived', 'delivered'];
+const shipTimeline = (status, hist) => { const idx = SHIP_FLOW.indexOf(status); return `<div class="tl">${SHIP_FLOW.map((k, i) => `<div class="st ${i < idx || status==='delivered' && i===idx ? 'done' : i === idx ? 'now' : ''}"><b>${ST[k][0]}</b><small>${hist[k] ? dt(hist[k]) : 'بانتظار التحديث'}</small></div>`).join('')}</div>`; };
+const shipMap = sh => sh.lat && sh.lng ? `<h3 class="sec">الموقع الحالي</h3><iframe class="map" loading="lazy" src="https://www.openstreetmap.org/export/embed.html?bbox=${sh.lng-.05},${sh.lat-.03},${+sh.lng+.05},${+sh.lat+.03}&marker=${sh.lat},${sh.lng}"></iframe>` : '<div class="note">تظهر الخريطة هنا عند توفر موقع الإرسالية.</div>';
+async function viewTrackResult(no) {
+  if (!need()) return; loading();
+  const { data: t, error } = await sb.rpc('track_shipment', { p_no: no });
+  if (error) return toast(errMsg(error));
+  if (!t) return shell('<div class="empty">لم يتم العثور على إرسالية بهذا الرقم</div>', 'home', 'تتبع إرسالية');
+  const hist = Object.fromEntries((t.events || []).map(x => [x.status, x.created_at]));
+  shell(`<div class="card"><div class="row between"><div><div class="mut">رقم التتبع</div><b dir="ltr" style="font-size:20px">${esc(t.tracking_no)}</b></div>${badge(t.status)}</div></div>
+  <div class="card"><div class="route">${esc(t.from_place)} <i>←</i> ${esc(t.to_place)}</div>${t.agency_name ? `<div class="kv"><span>المكتب</span><b>${esc(t.agency_name)}</b></div>` : ''}<div class="kv"><span>الوزن</span><b>${t.weight_kg} كجم</b></div></div>
+  <h3 class="sec">حالة الإرسالية</h3><div class="card">${t.status === 'cancelled' ? badge('cancelled') : shipTimeline(t.status, hist)}</div>${shipMap(t)}`, 'home', 'تتبع إرسالية');
 }
 async function viewShip(id) {
   if (!need()) return; loading();
   const [s, e] = await Promise.all([sb.from('shipments').select('*').eq('id', id).single(), sb.from('shipment_events').select('*').eq('shipment_id', id).order('created_at')]);
   const sh = s.data; if (!sh) return shell('<div class="empty">الإرسالية غير موجودة</div>', 'orders', 'التتبع');
-  const flow = ['received', 'in_transit', 'arrived', 'delivered'], idx = flow.indexOf(sh.status);
-  const hist = Object.fromEntries((e.data || []).map(x => [x.status, x]));
-  shell(`<div class="card"><div class="row between"><div><div class="mut">رقم التتبع</div><b dir="ltr" style="font-size:20px">${esc(sh.tracking_no)}</b></div>${badge(sh.status)}</div></div>
-  <div class="card"><div class="route">${esc(sh.from_place)} <i>←</i> ${esc(sh.to_place)}</div><div class="kv"><span>المرسل</span><b>${esc(sh.sender_name)}</b></div><div class="kv"><span>المستلم</span><b>${esc(sh.receiver_name)}</b></div><div class="kv"><span>الوزن</span><b>${sh.weight_kg} كجم</b></div><div class="kv"><span>التكلفة</span><b class="price">${money(sh.cost)}</b></div></div>
-  <h3 class="sec">حالة الإرسالية</h3><div class="card"><div class="tl">${flow.map((k, i) => `<div class="st ${i < idx || sh.status==='delivered' && i===idx ? 'done' : i === idx ? 'now' : ''}"><b>${ST[k][0]}</b><small>${hist[k] ? dt(hist[k].created_at) : 'بانتظار التحديث'}</small></div>`).join('')}</div></div>
-  ${sh.lat && sh.lng ? `<h3 class="sec">الموقع الحالي</h3><iframe class="map" loading="lazy" src="https://www.openstreetmap.org/export/embed.html?bbox=${sh.lng-.05},${sh.lat-.03},${+sh.lng+.05},${+sh.lat+.03}&marker=${sh.lat},${sh.lng}"></iframe>` : '<div class="note">تظهر الخريطة هنا عند توفر موقع الإرسالية.</div>'}`, 'orders', 'متابعة الإرسالية');
+  const [a, mine] = await Promise.all([getAgency(sh.agency_id), sh.status === 'delivered' ? myRating(sh.agency_id) : 0]);
+  const hist = Object.fromEntries((e.data || []).map(x => [x.status, x.created_at]));
+  shell(`${agencyLine(a)}${handlerCard(sh, sh.status === 'received' && !sh.handled_by)}<div class="card"><div class="row between"><div><div class="mut">رقم التتبع</div><b dir="ltr" style="font-size:20px">${esc(sh.tracking_no)}</b></div>${badge(sh.status)}</div></div>
+  <div class="card"><div class="route">${esc(sh.from_place)} <i>←</i> ${esc(sh.to_place)}</div><div class="kv"><span>المرسل</span><b>${esc(sh.sender_name)}</b></div><div class="kv"><span>المستلم</span><b>${esc(sh.receiver_name)}</b></div><div class="kv"><span>الوزن</span><b>${sh.weight_kg} كجم</b></div><div class="kv"><span>التكلفة</span><b class="price">${Number(sh.cost) > 0 ? money(sh.cost) : 'يحددها المكتب'}</b></div></div>
+  <h3 class="sec">حالة الإرسالية</h3><div class="card">${sh.status === 'cancelled' ? badge('cancelled') : shipTimeline(sh.status, hist)}</div>${shipMap(sh)}${sh.status === 'delivered' && a ? rateCard(mine) : ''}`, 'orders', 'متابعة الإرسالية');
+  if (sh.status === 'delivered' && a) wireRate(a.id, mine);
 }
 
 /* ---------- العقارات ---------- */
@@ -437,25 +462,29 @@ async function viewProp(id) {
 }
 
 /* ---------- التحويلات ---------- */
-function viewTransfer(aid) {
+async function viewTransfer(aid) {
   if (!need()) return; if (!aid) return go('#/office/transfers');
+  const a = await getAgency(aid);
+  if (!a || !a.is_open) return shell('<div class="note">هذا المكتب غير متاح حالياً.</div>', 'home', 'تحويل مالي');
+  const feeOf = x => (a.transfer_pct == null && a.transfer_min == null) ? 0 : Math.max(Math.round(x * Number(a.transfer_pct || 0) / 100), Number(a.transfer_min || 0));
+  const feeTxt = (a.transfer_pct == null && a.transfer_min == null) ? 'بدون رسوم' : `${a.transfer_pct ?? 0}%${a.transfer_min ? ' بحد أدنى ' + Number(a.transfer_min).toLocaleString('ar-EG') : ''}`;
   let kind = 'domestic';
   const CUR = { 'السودان': 'SDG', 'مصر': 'EGP', 'السعودية': 'SAR', 'الإمارات': 'AED', 'قطر': 'QAR', 'تركيا': 'TRY', 'أمريكا': 'USD' };
-  shell(`<div class="tabs"><button id="k1" class="on">تحويل داخلي</button><button id="k2">تحويل خارجي</button></div>
+  shell(`<div class="card row">${logoBox(a, 40)}<b>${esc(a.name)}</b></div><div class="tabs"><button id="k1" class="on">تحويل داخلي</button><button id="k2">تحويل خارجي</button></div>
   <label>الدولة</label><select id="co">${Object.keys(CUR).map(c=>`<option>${c}</option>`).join('')}</select><label>العملة</label><input id="cu" value="SDG" readonly dir="ltr">
   <label>اسم المرسل</label><input id="sn" value="${esc(user.full_name||'')}"><label>اسم المستلم</label><input id="rn"><label>هاتف المستلم</label><input id="rp" type="tel" dir="ltr">
   <label>المبلغ</label><input id="am" type="number" min="1" inputmode="decimal"><label>ملاحظة</label><input id="nt">
-  <div class="sum"><div class="row between"><span>الرسوم (2% بحد أدنى 500)</span><b id="fee">—</b></div><div class="row between"><span>الإجمالي</span><b class="price" id="tt">—</b></div></div>
+  <div class="sum"><div class="row between"><span>الرسوم (${feeTxt})</span><b id="fee">—</b></div><div class="row between"><span>الإجمالي</span><b class="price" id="tt">—</b></div></div>
   <div style="height:14px"></div><button class="btn" id="go">إرسال التحويل</button>`, 'home', 'تحويل مالي');
-  const calc = () => { const a = +val('am') || 0, f = a ? Math.max(Math.round(a * .02), 500) : 0; document.getElementById('fee').textContent = a ? money(f) : '—'; document.getElementById('tt').textContent = a ? money(a + f) : '—'; };
+  const calc = () => { const x = +val('am') || 0, f = x ? feeOf(x) : 0; document.getElementById('fee').textContent = x ? Number(f).toLocaleString('ar-EG') : '—'; document.getElementById('tt').textContent = x ? Number(x + f).toLocaleString('ar-EG') : '—'; };
   const setK = k => { kind = k; document.getElementById('k1').classList.toggle('on', k==='domestic'); document.getElementById('k2').classList.toggle('on', k==='international'); if (k==='domestic') { document.getElementById('co').value='السودان'; document.getElementById('cu').value='SDG'; } };
   document.getElementById('k1').onclick = () => setK('domestic'); document.getElementById('k2').onclick = () => setK('international');
   document.getElementById('co').onchange = e => document.getElementById('cu').value = CUR[e.target.value];
   document.getElementById('am').oninput = calc;
   document.getElementById('go').onclick = async e => {
-    const a = +val('am'); if (!val('sn') || !val('rn') || !val('rp') || !(a > 0)) return toast('أكمل الحقول المطلوبة');
+    const x = +val('am'); if (!val('sn') || !val('rn') || !val('rp') || !(x > 0)) return toast('أكمل الحقول المطلوبة');
     busy(e.target, true);
-    const { data, error } = await sb.from('transfers').insert({ kind, country: val('co'), currency: val('cu'), amount: a, sender_name: val('sn'), receiver_name: val('rn'), receiver_phone: val('rp'), note: val('nt'), agency_id: aid }).select().single();
+    const { data, error } = await sb.from('transfers').insert({ kind, country: val('co'), currency: val('cu'), amount: x, sender_name: val('sn'), receiver_name: val('rn'), receiver_phone: val('rp'), note: val('nt'), agency_id: aid }).select().single();
     busy(e.target, false); if (error) return toast(errMsg(error)); toast('تم إرسال طلب التحويل'); go('#/transfer/' + data.id);
   };
 }
@@ -463,21 +492,45 @@ async function viewTransferDetail(id) {
   if (!need()) return; loading();
   const { data: t } = await sb.from('transfers').select('*').eq('id', id).single();
   if (!t) return shell('<div class="empty">غير موجود</div>', 'orders', 'التحويل');
-  const flow = ['pending', 'processing', 'completed'], idx = Math.max(0, flow.indexOf(t.status));
-  shell(`<div class="card"><div class="row between"><b dir="ltr">${esc(t.ref_no)}</b>${badge(t.status)}</div></div>
-  <div class="card"><div class="kv"><span>النوع</span><b>${t.kind==='domestic'?'داخلي':'خارجي'}</b></div><div class="kv"><span>الدولة / العملة</span><b>${esc(t.country)} · ${esc(t.currency)}</b></div><div class="kv"><span>المستلم</span><b>${esc(t.receiver_name)}</b></div><div class="kv"><span>المبلغ</span><b>${Number(t.amount).toLocaleString('ar-EG')}</b></div><div class="kv"><span>الرسوم</span><b>${Number(t.fee).toLocaleString('ar-EG')}</b></div><div class="kv"><span>الإجمالي</span><b class="price">${Number(t.total).toLocaleString('ar-EG')} ${esc(t.currency)}</b></div></div>
-  <h3 class="sec">متابعة الحالة</h3><div class="card"><div class="tl">${flow.map((k,i)=>`<div class="st ${t.status==='completed'||i<idx?'done':i===idx&&!['rejected','cancelled'].includes(t.status)?'now':''}"><b>${ST[k][0]}</b></div>`).join('')}</div>${['rejected','cancelled'].includes(t.status)?badge(t.status):''}</div>`, 'orders', 'حالة التحويل');
+  const [a, pm, mine] = await Promise.all([getAgency(t.agency_id),
+    t.status === 'accepted' ? sb.from('payment_methods').select('*').eq('active', true).eq('agency_id', t.agency_id || '00000000-0000-0000-0000-000000000000').order('sort') : { data: [] },
+    t.status === 'completed' ? myRating(t.agency_id) : 0]);
+  const flow = ['pending', 'accepted', 'payment_review', 'processing', 'completed'], idx = Math.max(0, flow.indexOf(t.status)), dead = ['rejected', 'cancelled'].includes(t.status);
+  const lbl = { pending: 'أُرسل الطلب', accepted: 'قبول المكتب', payment_review: 'الدفع', processing: 'قيد التنفيذ', completed: 'تم التحويل' };
+  shell(`${agencyLine(a)}<div class="card"><div class="row between"><b dir="ltr">${esc(t.ref_no)}</b>${badge(t.status)}</div></div>
+  ${handlerCard(t, t.status === 'pending')}
+  <div class="card"><div class="kv"><span>النوع</span><b>${t.kind==='domestic'?'داخلي':'خارجي'}</b></div><div class="kv"><span>الدولة / العملة</span><b>${esc(t.country)} · ${esc(t.currency)}</b></div><div class="kv"><span>المستلم</span><b>${esc(t.receiver_name)}</b></div><div class="kv"><span>المبلغ</span><b>${Number(t.amount).toLocaleString('ar-EG')}</b></div><div class="kv"><span>الرسوم</span><b>${Number(t.fee).toLocaleString('ar-EG')}</b></div><div class="kv"><span>الإجمالي المطلوب دفعه</span><b class="price">${Number(t.total).toLocaleString('ar-EG')} ${esc(t.currency)}</b></div></div>
+  <h3 class="sec">متابعة الحالة</h3><div class="card">${dead ? badge(t.status) : `<div class="tl">${flow.map((k,i)=>`<div class="st ${t.status==='completed'||i<idx?'done':i===idx?'now':''}"><b>${lbl[k]}</b></div>`).join('')}</div>`}</div>
+  ${t.status==='accepted'?`<h3 class="sec">طريقة الدفع</h3><div class="note">قبل المكتب طلبك. حوّل المبلغ الإجمالي <b>${Number(t.total).toLocaleString('ar-EG')} ${esc(t.currency)}</b> ثم ارفع إثبات التحويل.</div>${payCards(pm.data || [], t.agency_id) || '<div class="note">لم يضف المكتب وسيلة دفع بعد. تواصل مع المشرف لمعرفة طريقة الدفع.</div>'}<h3 class="sec">إثبات الدفع</h3><label style="margin-top:0">صورة إشعار التحويل</label><input type="file" id="fl" accept="image/*,application/pdf"><div style="height:12px"></div><button class="btn acc" id="up">رفع إثبات الدفع</button>`
+  : t.status==='payment_review'?'<div class="note">تم استلام إثبات الدفع، والمشرف يراجعه ثم ينفّذ التحويل.</div>':''}
+  ${['pending','accepted','payment_review'].includes(t.status)?'<div style="height:10px"></div><button class="btn ghost" id="cn">إلغاء الطلب</button>':''}
+  ${t.status === 'completed' && a ? rateCard(mine) : ''}`, 'orders', 'حالة التحويل');
+  copyBtns(); if (t.status === 'completed' && a) wireRate(a.id, mine);
+  const up = document.getElementById('up');
+  if (up) up.onclick = async () => {
+    const f = document.getElementById('fl').files[0]; if (!f) return toast('اختر ملفاً أولاً'); if (f.size > 5 * 1024 * 1024) return toast('الحجم الأقصى 5 ميغابايت');
+    busy(up, true);
+    const path = `${user.id}/t-${t.id}-${Date.now()}.${(f.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+    const u = await sb.storage.from('payment-proofs').upload(path, f, { contentType: f.type });
+    if (u.error) { busy(up, false); return toast(u.error.message); }
+    const r = await sb.rpc('submit_transfer_proof', { p_transfer: t.id, p_path: path });
+    if (r.error) { busy(up, false); return toast(errMsg(r.error)); }
+    toast('تم رفع الإثبات'); viewTransferDetail(id);
+  };
+  const cn = document.getElementById('cn');
+  if (cn) cn.onclick = async () => { if (!confirm('إلغاء هذا الطلب؟')) return; const r = await sb.rpc('cancel_transfer', { p_transfer: t.id }); if (r.error) return toast(errMsg(r.error)); toast('تم الإلغاء'); viewTransferDetail(id); };
 }
 
 /* ---------- الموافقات الأمنية ---------- */
 async function viewSecurityNew(aid) {
   if (!need()) return; if (!aid) return go('#/office/security');
-  const { data } = await sb.from('services').select('name').eq('office_slug', 'security').eq('active', true).order('sort');
-  shell(`<label>الخدمة</label><select id="sv">${(data||[]).map(x=>`<option>${esc(x.name)}</option>`).join('')}</select><label>الاسم الكامل</label><input id="fn" value="${esc(user.full_name||'')}"><label>الهاتف</label><input id="ph" type="tel" dir="ltr" value="${esc(user.phone||'')}">
+  const a = await getAgency(aid);
+  if (!a || !a.is_open) return shell('<div class="note">هذا المكتب غير متاح حالياً.</div>', 'home', 'طلب موافقة أمنية');
+  shell(`<div class="card row">${logoBox(a, 40)}<b>${esc(a.name)}</b></div><label>نوع الطلب / الخدمة</label><input id="sv" placeholder="مثال: تصريح سفر"><label>الاسم الكامل</label><input id="fn" value="${esc(user.full_name||'')}"><label>الهاتف</label><input id="ph" type="tel" dir="ltr" value="${esc(user.phone||'')}">
   <label>رقم الهوية / الجواز</label><input id="idn" dir="ltr"><label>ملاحظات</label><textarea id="nt"></textarea><label>المستندات (صور أو PDF، حتى 5 ملفات)</label><input type="file" id="fl" multiple accept="image/*,application/pdf">
   <div style="height:16px"></div><button class="btn" id="go">إرسال الطلب</button>`, 'home', 'طلب موافقة أمنية');
   document.getElementById('go').onclick = async e => {
-    if (!val('fn') || !val('ph')) return toast('الاسم والهاتف مطلوبان');
+    if (!val('fn') || !val('ph') || !val('sv')) return toast('الخدمة والاسم والهاتف مطلوبة');
     const files = [...document.getElementById('fl').files].slice(0, 5); if (files.some(f => f.size > 5 * 1024 * 1024)) return toast('الحد الأقصى لكل ملف 5 ميغابايت');
     busy(e.target, true); const paths = [];
     for (const f of files) { const p = `${user.id}/${Date.now()}-${paths.length}.${(f.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')}`; const u = await sb.storage.from('documents').upload(p, f, { contentType: f.type }); if (u.error) { busy(e.target, false); return toast(u.error.message); } paths.push(p); }
@@ -489,10 +542,12 @@ async function viewSecurity(id) {
   if (!need()) return; loading();
   const { data: r } = await sb.from('security_requests').select('*').eq('id', id).single();
   if (!r) return shell('<div class="empty">غير موجود</div>', 'orders', 'الطلب');
+  const [a, mine] = await Promise.all([getAgency(r.agency_id), r.status === 'approved' ? myRating(r.agency_id) : 0]);
   const flow = ['pending', 'processing', 'approved'], idx = Math.max(0, flow.indexOf(r.status));
-  shell(`<div class="card"><div class="mut">رقم الطلب</div><div class="row between"><b dir="ltr" style="font-size:20px">${esc(r.ref_no)}</b>${badge(r.status)}</div></div>
+  shell(`${agencyLine(a)}${handlerCard(r, r.status === 'pending' && !r.handled_by)}<div class="card"><div class="mut">رقم الطلب</div><div class="row between"><b dir="ltr" style="font-size:20px">${esc(r.ref_no)}</b>${badge(r.status)}</div></div>
   <div class="card"><div class="kv"><span>الخدمة</span><b>${esc(r.service)}</b></div><div class="kv"><span>مقدم الطلب</span><b>${esc(r.full_name)}</b></div><div class="kv"><span>المستندات</span><b>${r.docs.length} ملف</b></div><div class="kv"><span>التاريخ</span><b>${dt(r.created_at)}</b></div></div>
-  <h3 class="sec">متابعة الطلب</h3><div class="card"><div class="tl">${flow.map((k,i)=>`<div class="st ${r.status==='approved'||i<idx?'done':i===idx&&r.status!=='rejected'?'now':''}"><b>${ST[k][0]}</b></div>`).join('')}</div>${r.status==='rejected'?badge('rejected'):''}</div>`, 'orders', 'حالة الطلب');
+  <h3 class="sec">متابعة الطلب</h3><div class="card"><div class="tl">${flow.map((k,i)=>`<div class="st ${r.status==='approved'||i<idx?'done':i===idx&&r.status!=='rejected'?'now':''}"><b>${ST[k][0]}</b></div>`).join('')}</div>${r.status==='rejected'?badge('rejected'):''}</div>${r.status === 'approved' && a ? rateCard(mine) : ''}`, 'orders', 'حالة الطلب');
+  if (r.status === 'approved' && a) wireRate(a.id, mine);
 }
 
 /* ---------- طلباتي / إشعارات / حسابي ---------- */
@@ -538,6 +593,7 @@ async function route() {
     props: () => viewProps(b), prop: () => viewProp(b),
     transfer: () => b === 'new' ? viewTransfer(c) : viewTransferDetail(b),
     security: () => b === 'new' ? viewSecurityNew(c) : viewSecurity(b),
+    track: () => viewTrackResult(decodeURIComponent(b || '')),
     orders: viewOrders, notifs: viewNotifs, me: viewMe
   };
   $app.onclick = null;
@@ -548,15 +604,27 @@ async function loadUser(session) {
   const [p, n] = await Promise.all([sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle(), sb.from('notifications').select('id', { count: 'exact', head: true }).eq('read', false)]);
   user = { id: session.user.id, email: session.user.email, ...(p.data || {}) }; unread = n.count || 0;
 }
+let pushOn = false;
+async function registerPush() {
+  const P = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.PushNotifications;
+  if (!P || !(window.ENV && ENV.PUSH) || !user || pushOn) return;
+  try {
+    const pr = await P.requestPermissions(); if (pr.receive !== 'granted') return;
+    pushOn = true;
+    P.addListener('registration', t => sb.rpc('register_device', { p_token: t.value, p_platform: 'android' }));
+    P.addListener('pushNotificationActionPerformed', () => go('#/notifs'));
+    await P.register();
+  } catch (e) { console.warn('push', e); }
+}
 async function boot() {
   if (sb) {
-    const { data } = await sb.auth.getSession(); await loadUser(data.session);
+    const { data } = await sb.auth.getSession(); await loadUser(data.session); registerPush();
     sb.auth.onAuthStateChange((ev, s) => {
       if (ev === 'INITIAL_SESSION' || recovering) return;
       /* عند العودة من معرض الصور يُعيد Supabase إرسال SIGNED_IN لنفس المستخدم؛ لا نُعيد رسم الصفحة حتى لا يضيع الملف المختار */
       const same = s && user && s.user.id === user.id;
       if (ev === 'TOKEN_REFRESHED' || (same && (ev === 'SIGNED_IN' || ev === 'USER_UPDATED'))) return;
-      setTimeout(async () => { await loadUser(s); if (ev === 'SIGNED_OUT') { lsDel('home_v1'); go('#/'); } route(); }, 0);
+      setTimeout(async () => { await loadUser(s); registerPush(); if (ev === 'SIGNED_OUT') { lsDel('home_v2'); go('#/'); } route(); }, 0);
     });
   }
   window.addEventListener('hashchange', route);
